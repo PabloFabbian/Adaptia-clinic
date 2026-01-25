@@ -2,8 +2,11 @@ import express from 'express';
 import { CAPABILITIES, SCOPES } from './src/auth/permissions.js';
 import { createMember, createAppointment } from './src/auth/models.js';
 import { filterResources } from './src/auth/filters.js';
+import cors from 'cors';
 
 const app = express();
+app.use(cors());
+
 const PORT = 3000;
 
 // --- 1. MOCK DE BASE DE DATOS (Estado Inicial) ---
