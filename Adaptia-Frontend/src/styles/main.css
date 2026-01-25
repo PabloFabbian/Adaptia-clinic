@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+    --color-sidebar-bg: #f7f7f5;
+    --color-border-light: #e5e5e3;
+    --color-text-main: #37352f;
+    --color-text-muted: #73726e;
+}
+
+body {
+    @apply antialiased text-text-main;
+}
