@@ -1,4 +1,4 @@
-// src/App.jsx
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { useAppointments } from './hooks/useAppointments';
 import { AppointmentTable } from './components/AppointmentTable';
 import { PermissionToggle } from './components/PermissionToggle';
@@ -7,22 +7,31 @@ function App() {
   const { appointments, user, fetchAppointments } = useAppointments();
 
   return (
-    <main>
-      <header>
-        <h1>Adaptia Clinic</h1>
-        {user && <p>Sesión iniciada: {user}</p>}
-      </header>
+    <Router>
+      <nav>
+        {/* Aquí puedes aplicar tu diseño de Sidebar o Navbar */}
+        <Link to="/">Citas</Link> | <Link to="/settings">Privacidad</Link>
+      </nav>
 
-      <section>
-        <h2>Panel de Citas</h2>
-        <AppointmentTable appointments={appointments} />
-      </section>
+      <Routes>
+        {/* RUTA PRINCIPAL: AGENDA */}
+        <Route path="/" element={
+          <section>
+            <h1>Agenda de {user}</h1>
+            <AppointmentTable appointments={appointments} />
+          </section>
+        } />
 
-      <aside>
-        <h2>Configuración de Permisos</h2>
-        <PermissionToggle onUpdate={fetchAppointments} />
-      </aside>
-    </main>
+        {/* RUTA DE CONFIGURACIÓN: PERMISOS */}
+        <Route path="/settings" element={
+          <section>
+            <h1>Configuración de Permisos</h1>
+            <p>Gestiona quién puede ver tus citas en la clínica.</p>
+            <PermissionToggle onUpdate={fetchAppointments} />
+          </section>
+        } />
+      </Routes>
+    </Router>
   );
 }
 
