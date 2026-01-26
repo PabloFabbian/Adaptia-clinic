@@ -1,38 +1,45 @@
-import { User, Calendar, Share2, Clock } from 'lucide-react';
+import { useState } from 'react';
+import {
+    Home, Users, Briefcase, Calendar,
+    ArrowLeft, ExternalLink, UserPlus, Layout,
+    ShieldCheck, Globe, Activity, Settings,
+    User, Share2, Clock
+} from 'lucide-react';
 
+// ===== APPOINTMENT TABLE =====
 export const AppointmentTable = ({ appointments }) => {
     return (
         <div className="overflow-hidden">
             <table className="w-full text-sm">
-                <thead className="bg-gradient-to-r from-gray-50 to-white text-gray-600 border-b border-gray-200">
+                <thead className="bg-white/50 text-gray-400 border-b border-gray-100">
                     <tr>
-                        <th className="px-6 py-4 font-semibold text-left text-xs uppercase tracking-wider">
+                        <th className="px-6 py-4 font-light text-left text-xs uppercase tracking-widest">
                             <div className="flex items-center gap-2">
-                                <User className="w-4 h-4 text-gray-400" />
+                                <User className="w-4 h-4" strokeWidth={1.5} />
                                 Paciente
                             </div>
                         </th>
-                        <th className="px-6 py-4 font-semibold text-left text-xs uppercase tracking-wider">
+                        <th className="px-6 py-4 font-light text-left text-xs uppercase tracking-widest">
                             <div className="flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-gray-400" />
+                                <Calendar className="w-4 h-4" strokeWidth={1.5} />
                                 Fecha
                             </div>
                         </th>
-                        <th className="px-6 py-4 font-semibold text-left text-xs uppercase tracking-wider">
+                        <th className="px-6 py-4 font-light text-left text-xs uppercase tracking-widest">
                             <div className="flex items-center gap-2">
-                                <Share2 className="w-4 h-4 text-gray-400" />
+                                <Share2 className="w-4 h-4" strokeWidth={1.5} />
                                 Estado
                             </div>
                         </th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-50">
                     {appointments.length === 0 ? (
                         <tr>
-                            <td colSpan="3" className="px-6 py-12 text-center">
-                                <div className="flex flex-col items-center gap-3 text-gray-400">
-                                    <Clock className="w-12 h-12 opacity-20" />
-                                    <p className="text-sm font-medium">No hay citas programadas</p>
+                            <td colSpan="3" className="px-6 py-16 text-center">
+                                <div className="flex flex-col items-center gap-3 text-gray-300">
+                                    <Clock className="w-12 h-12 opacity-20" strokeWidth={1} />
+                                    <p className="text-sm font-light">No hay citas programadas</p>
                                 </div>
                             </td>
                         </tr>
@@ -40,33 +47,33 @@ export const AppointmentTable = ({ appointments }) => {
                         appointments.map((appo, index) => (
                             <tr
                                 key={appo.id}
-                                className="group hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-transparent transition-all duration-200"
-                                style={{ animationDelay: `${index * 40}ms` }}
+                                className="group hover:bg-blue-50/20 transition-all duration-300"
+                                style={{ animationDelay: `${index * 50}ms` }}
                             >
                                 <td className="px-6 py-5">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm shadow-md shadow-blue-500/30">
+                                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400/80 to-blue-500/80 flex items-center justify-center text-white font-light text-sm backdrop-blur-sm">
                                             {appo.patientName?.charAt(0).toUpperCase() || 'P'}
                                         </div>
-                                        <span className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                                        <span className="font-light text-gray-700 group-hover:text-blue-600 transition-colors">
                                             {appo.patientName}
                                         </span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-5">
-                                    <span className="text-gray-600 font-medium">
+                                    <span className="text-gray-500 font-light">
                                         {appo.date}
                                     </span>
                                 </td>
                                 <td className="px-6 py-5">
                                     {appo.ownerId === 1 ? (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border border-emerald-200">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-light bg-emerald-50/50 text-emerald-600 border border-emerald-100/50">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
                                             Propia
                                         </span>
                                     ) : (
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700 border border-purple-200">
-                                            <Share2 className="w-3 h-3" />
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-light bg-purple-50/50 text-purple-600 border border-purple-100/50">
+                                            <Share2 className="w-3 h-3" strokeWidth={1.5} />
                                             Compartida
                                         </span>
                                     )}
