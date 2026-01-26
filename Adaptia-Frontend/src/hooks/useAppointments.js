@@ -6,28 +6,33 @@ export const useAppointments = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Usamos useCallback para poder llamar a refresh desde otros componentes sin bucles infinitos
     const fetchAppointments = useCallback(async () => {
-        setLoading(true);
+        // No ponemos loading(true) aquí si ya hay datos, 
+        // para evitar que la pantalla parpadee al refrescar.
         setError(null);
+
         try {
-            // Nota: Asegúrate de que el puerto (3000 o 3001) coincida con tu servidor de Node
+            // 1. Verificamos que el puerto sea el 3001 del nuevo index.js
             const res = await fetch('http://localhost:3001/api/appointments');
 
-            if (!res.ok) throw new Error('Error en la respuesta del servidor');
+            if (!res.ok) {
+                throw new Error(`Error del servidor: ${res.status}`);
+            }
 
-            const data = await res.json();
+            const json = await res.json();
 
-            /**
-             * data.data: El array de citas filtradas por el Backend (propias + compartidas)
-             * data.user: Info del usuario actual (nombre, rol, etc.)
-             */
-            setAppointments(data.data || []);
-            setUser(data.user || null);
+            // 2. Mapeo correcto de la respuesta:
+            // En tu index.js envías: { user: "Luis David", data: rows }
+            setAppointments(json.data || []);
+            setUser(json.user || "Usuario");
+
         } catch (err) {
-            console.error("Error cargando citas:", err);
+            console.error("❌ Error en el fetch de citas:", err);
             setError(err.message);
+            // Si hay error, nos aseguramos de vaciar las citas para no mostrar basura
+            setAppointments([]);
         } finally {
+            // 3. Importante: Esto quita el mensaje de "Cargando..."
             setLoading(false);
         }
     }, []);
