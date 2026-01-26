@@ -1,71 +1,126 @@
+import 'dotenv/config'; // Carga las variables del archivo .env
 import express from 'express';
-import { CAPABILITIES, SCOPES } from './src/auth/permissions.js';
-import { createMember, createAppointment } from './src/auth/models.js';
-import { filterResources } from './src/auth/filters.js';
 import cors from 'cors';
+import pg from 'pg';
+const { Pool } = pg;
+
+// Importamos la estructura de la base de datos y la lógica de permisos
+import { createDatabaseSchema } from './src/auth/models.js';
+import { getResourceFilter } from './src/auth/permissions.js';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-const PORT = 3000;
+const PORT = 3001;
 
-// --- 1. MOCK DE BASE DE DATOS (Estado Inicial) ---
-// Simulamos lo que tenías en tu script: Luis David (Admin) y Esteban (Psicólogo)
-const members = [
-    createMember(1, 'Luis David', 'Admin', [CAPABILITIES.VIEW_ALL_APPOINTMENTS]),
-    createMember(2, 'Esteban', 'Psicólogo', [])
-];
-
-// Añadimos citas para que el filtro tenga qué procesar
-const appointments = [
-    createAppointment(101, 1, 'Paciente de Luis David', '2023-10-20'),
-    createAppointment(102, 2, 'Paciente de Esteban', '2023-10-21')
-];
-
-// --- 2. ENDPOINTS (La magia de Express) ---
-
-// Endpoint para ver qué citas son visibles para el usuario actual
-app.get('/appointments', (req, res) => {
-    // Simulamos que el usuario que hace la petición es Luis David (ID: 1)
-    const currentUser = members.find(m => m.id === 1);
-
-    // Aplicamos el motor de filtrado de Adaptia
-    const visibleAppointments = filterResources(
-        currentUser,
-        appointments,
-        members,
-        CAPABILITIES.VIEW_ALL_APPOINTMENTS,
-        SCOPES.SHARE_APPOINTMENTS
-    );
-
-    res.json({
-        user: currentUser.name,
-        totalInClinic: appointments.length,
-        visibleForYou: visibleAppointments.length,
-        data: visibleAppointments
-    });
-});
-
-// Endpoint para simular que Esteban cambia su privacidad (Progreso Visual)
-app.get('/toggle-esteban', (req, res) => {
-    const esteban = members.find(m => m.id === 2);
-
-    if (esteban.consents.includes(SCOPES.SHARE_APPOINTMENTS)) {
-        esteban.consents = []; // Quitar permiso
-    } else {
-        esteban.consents.push(SCOPES.SHARE_APPOINTMENTS); // Dar permiso
+// --- 1. CONFIGURACIÓN DE POSTGRESQL (Nube - Neon) ---
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false
     }
-
-    res.send(`Permisos de Esteban actualizados. Ahora comparte: ${esteban.consents.length > 0}`);
 });
 
-// --- 3. INICIO DEL SERVIDOR ---
+// Middleware para inyectar el pool en cada petición
+app.use((req, res, next) => {
+    req.pool = pool;
+    next();
+});
+
+// --- 2. INICIALIZACIÓN DE LA BASE DE DATOS ---
+pool.query(createDatabaseSchema)
+    .then(() => console.log("✨ ¡Conectado a Neon! Tablas de Adaptia sincronizadas en São Paulo"))
+    .catch(err => console.error("❌ Error al sincronizar tablas en la nube:", err));
+
+// --- 3. ENDPOINTS ---
+
+// GET: Citas filtradas por consentimiento
+app.get('/api/appointments', async (req, res) => {
+    try {
+        const viewerMemberId = 1; // Simulación: Luis David
+        const clinicId = 1;
+
+        const filter = await getResourceFilter(req.pool, viewerMemberId, clinicId, 'appointments');
+
+        const query = `
+            SELECT a.*, p.name as patient_name 
+            FROM appointments a
+            LEFT JOIN patients p ON a.patient_id = p.id
+            WHERE ${filter.query}
+        `;
+
+        const { rows } = await req.pool.query(query, filter.params);
+        res.json({ user: "Luis David", data: rows });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Error al obtener citas" });
+    }
+});
+
+// POST: Registrar nuevo paciente
+app.post('/api/patients', async (req, res) => {
+    try {
+        const { name, ownerMemberId } = req.body;
+        const query = `
+            INSERT INTO patients (name, owner_member_id, history)
+            VALUES ($1, $2, '{}'::jsonb)
+            RETURNING *;
+        `;
+        const { rows } = await req.pool.query(query, [name, ownerMemberId]);
+        res.status(201).json({ data: rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: "Error al crear paciente" });
+    }
+});
+
+// POST: Añadir nota al historial JSONB del paciente
+app.post('/api/patients/:id/notes', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { content } = req.body;
+        const date = new Date().toISOString().split('T')[0];
+
+        const query = `
+            UPDATE patients 
+            SET history = history || jsonb_build_object($2, $3)
+            WHERE id = $1
+            RETURNING *;
+        `;
+        const { rows } = await req.pool.query(query, [id, date, content]);
+        res.json({ message: "Nota guardada", data: rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: "Error al guardar nota" });
+    }
+});
+
+// GET: Alternar consentimiento de Esteban (Simulación para demo)
+app.get('/api/toggle-esteban', async (req, res) => {
+    try {
+        const current = await pool.query(
+            "SELECT is_granted FROM consents WHERE member_id = 2 AND resource_type = 'appointments'"
+        );
+        const newValue = current.rows.length > 0 ? !current.rows[0].is_granted : true;
+
+        await pool.query(`
+            INSERT INTO consents (member_id, resource_type, is_granted, clinic_id)
+            VALUES (2, 'appointments', $1, 1)
+            ON CONFLICT (member_id, resource_type) DO UPDATE SET is_granted = $1
+        `, [newValue]);
+
+        res.send(`Estado de Esteban: ${newValue ? 'Compartiendo' : 'Privado'}`);
+    } catch (err) {
+        res.status(500).send("Error en el toggle");
+    }
+});
+
+// --- 4. INICIO DEL SERVIDOR ---
 app.listen(PORT, () => {
     console.log(`
-    🚀 ADAPTIA API CORRIENDO
+    🚀 ADAPTIA CLOUD BACKEND READY
     -------------------------------------------
-    🔗 Ver citas filtradas: http://localhost:${PORT}/appointments
-    🔄 Alternar permiso de Esteban: http://localhost:${PORT}/toggle-esteban
+    🔗 Base de Datos: Neon (AWS São Paulo)
+    🔗 URL: http://localhost:${PORT}
     -------------------------------------------
     `);
 });
