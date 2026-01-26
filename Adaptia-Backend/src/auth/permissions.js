@@ -1,24 +1,39 @@
-// Adaptia - Sistema de Permisos Flexibles
+// src/auth/permissions.js
 
-export const CAPABILITIES = {
-    VIEW_ALL_APPOINTMENTS: 'clinic:appointments:view_all',
-    VIEW_ALL_PATIENTS: 'clinic:patients:view_all',
-    MANAGE_MEMBERS: 'clinic:members:manage'
-};
+/**
+ * Genera las condiciones de filtrado basadas en el Consentimiento.
+ * @param {number} viewerMemberId - El ID del miembro que está logueado.
+ * @param {number} clinicId - La clínica donde está operando.
+ * @param {string} resourceType - 'appointments' o 'patients'.
+ */
+export const getResourceFilter = async (pool, viewerMemberId, clinicId, resourceType) => {
+    // 1. Buscamos el rol y las capacidades del usuario actual
+    const memberInfo = await pool.query(`
+        SELECT r.id as role_id, c.slug as capability
+        FROM members m
+        JOIN roles r ON m.role_id = r.id
+        JOIN role_capabilities rc ON r.id = rc.role_id
+        JOIN capabilities c ON rc.capability_id = c.id
+        WHERE m.id = $1`, [viewerMemberId]);
 
-export const SCOPES = {
-    SHARE_APPOINTMENTS: 'member:share:appointments',
-    SHARE_PATIENTS: 'member:share:patients'
-};
+    const capabilities = memberInfo.rows.map(row => row.capability);
+    const canViewAll = capabilities.includes(`view_all_${resourceType}`);
 
-// Asegúrate de que el nombre sea "hasPermission"
-export const hasPermission = (requestingMember, ownerMember, capability, scope) => {
-    // Si soy el dueño del recurso, siempre tengo acceso
-    if (requestingMember.id === ownerMember.id) return true;
+    if (canViewAll) {
+        // LÓGICA CORE: 
+        // Ver mis recursos + recursos de otros que HAN DADO CONSENTIMIENTO
+        return {
+            query: `(owner_member_id = $1 OR owner_member_id IN (
+                SELECT member_id FROM consents 
+                WHERE resource_type = $2 AND is_granted = TRUE
+            ))`,
+            params: [viewerMemberId, resourceType]
+        };
+    }
 
-    // Verificamos Capacidad (del Rol) y Consentimiento (del Dueño)
-    const canDoIt = requestingMember.role.capabilities.includes(capability);
-    const isAllowedByOwner = ownerMember.consents.includes(scope);
-
-    return canDoIt && isAllowedByOwner;
+    // Si no tiene capacidad de ver todo, solo ve lo suyo
+    return {
+        query: `owner_member_id = $1`,
+        params: [viewerMemberId]
+    };
 };
