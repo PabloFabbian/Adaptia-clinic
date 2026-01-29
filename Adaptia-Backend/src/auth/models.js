@@ -1,7 +1,6 @@
 /**
  * ADAPTIA - ESQUEMA DE BASE DE DATOS PROFESIONAL
- * Este esquema permite la colaboración entre iguales (psicólogos)
- * mediante el sistema de Capacidades (Roles) y Scopes (Consentimientos).
+ * Actualizado para soportar Notas Clínicas detalladas con IA.
  */
 
 export const createDatabaseSchema = `
@@ -26,8 +25,16 @@ export const createDatabaseSchema = `
     PRIMARY KEY (role_id, capability_id)
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS members (
     id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
     name TEXT NOT NULL,
     role_id INTEGER REFERENCES roles(id),
     clinic_id INTEGER REFERENCES clinics(id)
@@ -55,5 +62,17 @@ export const createDatabaseSchema = `
     owner_member_id INTEGER REFERENCES members(id),
     date DATE NOT NULL,
     status TEXT DEFAULT 'pending'
+  );
+
+  -- TABLA DE NOTAS CLÍNICAS (Estructura Detallada)
+  CREATE TABLE IF NOT EXISTS clinical_notes (
+    id SERIAL PRIMARY KEY,
+    patient_id INTEGER REFERENCES patients(id) ON DELETE CASCADE,
+    member_id INTEGER REFERENCES members(id),
+    title TEXT,
+    summary TEXT,
+    category TEXT DEFAULT 'Evolución',
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
 `;
