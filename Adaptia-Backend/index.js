@@ -6,6 +6,7 @@ const { Pool } = pg;
 
 import { createDatabaseSchema } from './src/auth/models.js';
 import { getResourceFilter } from './src/auth/permissions.js';
+import patientRouter from './src/patients/patients.js'; // Importamos el router modular
 
 const app = express();
 app.use(cors());
@@ -19,12 +20,13 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
+// Middleware para inyectar el pool en cada request
 app.use((req, res, next) => {
     req.pool = pool;
     next();
 });
 
-// --- 2. INICIALIZACIÓN ---
+// --- 2. INICIALIZACIÓN DE TABLAS ---
 pool.query(createDatabaseSchema)
     .then(() => console.log("✨ Tablas sincronizadas en Neon"))
     .catch(err => console.error("❌ Error DB:", err));
@@ -51,7 +53,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// --- 4. ENDPOINTS DE RECURSOS (LECTURA) ---
+// --- 4. RUTAS MODULARES ---
+
+// Todas las rutas de pacientes (GET /, PUT /:id, GET /:id/export-pdf)
+app.use('/api/patients', patientRouter);
+
+// --- 5. OTROS RECURSOS ---
 
 app.get('/', (req, res) => res.send('🚀 Adaptia API Operativa'));
 
@@ -82,17 +89,7 @@ app.get(['/api/appointments', '/api/appointments/all'], async (req, res) => {
     }
 });
 
-// PACIENTES: Lista general
-app.get('/api/patients', async (req, res) => {
-    try {
-        const { rows } = await pool.query('SELECT * FROM patients ORDER BY name ASC');
-        res.json({ data: rows });
-    } catch (err) {
-        res.status(500).json({ error: "Error en base de pacientes" });
-    }
-});
-
-// HISTORIAL DE NOTAS (Actualizado para mostrar nuevos campos)
+// HISTORIAL DE NOTAS (Específico para la vista de HistoryPage)
 app.get('/api/patients/:id/notes', async (req, res) => {
     const { id } = req.params;
     try {
@@ -111,14 +108,11 @@ app.get('/api/patients/:id/notes', async (req, res) => {
     }
 });
 
-// --- 5. ACCIONES DE ESCRITURA ---
+// --- 6. ESCRITURA DE NOTAS ---
 
-// NUEVA NOTA CLÍNICA (Sincronizada con el ClinicalNoteModal automatizado)
 app.post('/api/clinical-notes', async (req, res) => {
-    // Desestructuramos los campos que vienen del frontend
     const { patient_id, member_id, content, title, summary, category } = req.body;
 
-    // Validación mínima de seguridad
     if (!patient_id || !content) {
         return res.status(400).json({ error: "Falta el ID del paciente o el contenido de la nota." });
     }
@@ -132,41 +126,20 @@ app.post('/api/clinical-notes', async (req, res) => {
 
         const values = [
             patient_id,
-            member_id || 1, // ID del profesional (por defecto 1 si no viene)
-            content,        // El 'formData.details' del modal
+            member_id || 1,
+            content,
             title || 'Nota de Evolución',
-            summary || '',  // Lo que generó Gemini
+            summary || '',
             category || 'Evolución'
         ];
 
         const { rows } = await req.pool.query(query, values);
-
         console.log(`✅ Nota guardada para paciente #${patient_id}`);
         res.status(201).json({ success: true, data: rows[0] });
 
     } catch (err) {
         console.error("❌ Error SQL al guardar nota:", err.message);
-        // Respuesta clara para el frontend
-        res.status(500).json({
-            error: "Error interno en la base de datos",
-            detail: err.message
-        });
-    }
-});
-
-// REGISTRO DE PACIENTE
-app.post('/api/patients', async (req, res) => {
-    try {
-        const { name, ownerMemberId, history } = req.body;
-        const query = `
-            INSERT INTO patients (name, owner_member_id, history) 
-            VALUES ($1, $2, $3) RETURNING *
-        `;
-        const values = [name, ownerMemberId || 1, history ? JSON.stringify(history) : '{}'];
-        const { rows } = await req.pool.query(query, values);
-        res.status(201).json({ data: rows[0] });
-    } catch (err) {
-        res.status(500).json({ error: "Error al crear el registro" });
+        res.status(500).json({ error: "Error interno en la base de datos" });
     }
 });
 

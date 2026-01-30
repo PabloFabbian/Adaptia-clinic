@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 
 // Hooks y Contexto
 import { usePatients } from '../hooks/usePatients';
-import { useAuth } from '../context/AuthContext'; // Importamos el contexto de autenticación
+import { useAuth } from '../context/AuthContext';
 
 // Componentes
 import { PatientDetailsPanel } from '../features/patients/PatientDetailsPanel';
@@ -13,14 +13,14 @@ import { ClinicalNoteModal } from '../features/patients/ClinicalNoteModal';
 
 export const PatientsPage = () => {
     const navigate = useNavigate();
-    const { user } = useAuth(); // Obtenemos el usuario logueado
+    const { user } = useAuth();
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
     const [, setSearchParams] = useSearchParams();
 
-    // Hook personalizado para traer pacientes (pasa setSelectedPatient para manejar la carga inicial si hay params)
-    const { patients, loading } = usePatients(setSelectedPatient);
+    // Extraemos 'refresh' para actualizar tras guardar
+    const { patients, loading, refresh } = usePatients(setSelectedPatient);
 
     const closePanel = () => {
         setSelectedPatient(null);
@@ -30,17 +30,16 @@ export const PatientsPage = () => {
     const handleSaveNote = async (formData) => {
         try {
             if (!selectedPatient) {
-                toast.error("Error de selección", { description: "No hay ningún paciente seleccionado" });
+                toast.error("Error", { description: "No hay paciente seleccionado" });
                 return;
             }
 
-            // Usamos la URL del backend y el ID del usuario real
             const response = await fetch('http://localhost:3001/api/clinical-notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     patient_id: selectedPatient.id,
-                    member_id: user?.id || 1, // ID dinámico desde AuthContext
+                    member_id: user?.id || 1,
                     content: formData.details,
                     title: formData.title,
                     summary: formData.summary,
@@ -48,37 +47,31 @@ export const PatientsPage = () => {
                 })
             });
 
-            const result = await response.json();
+            if (!response.ok) throw new Error("Error al guardar");
 
-            if (!response.ok) {
-                throw new Error(result.error || "Error al guardar en el servidor");
-            }
-
-            toast.success("Nota guardada", { description: "El historial clínico ha sido actualizado." });
+            toast.success("Nota guardada");
             setIsNoteModalOpen(false);
 
-            // Refrescamos los datos del paciente seleccionado para ver la nueva nota
-            // Esto asume que tienes una función de refresh o que el panel escucha cambios
+            // Actualización dinámica
+            refresh();
+            setSelectedPatient({ ...selectedPatient });
+
         } catch (err) {
-            console.error("Error al guardar:", err);
             toast.error("Error al guardar", { description: err.message });
         }
     };
 
-    // Filtro de búsqueda
+    // Búsqueda optimizada sobre columnas reales
     const filteredPatients = patients.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.history?.dni && p.history.dni.includes(searchTerm))
+        (p.dni && p.dni.includes(searchTerm)) ||
+        (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (
         <div className="relative min-h-screen">
-            {/* CONTENIDO PRINCIPAL */}
-            <div className={`max-w-7xl mx-auto px-6 py-10 transition-all duration-700 ease-in-out ${selectedPatient
-                ? 'pr-[420px] scale-[0.97] blur-sm opacity-50 pointer-events-none'
-                : 'scale-100 opacity-100'
+            <div className={`max-w-7xl mx-auto px-6 py-10 transition-all duration-700 ease-in-out ${selectedPatient ? 'pr-[420px] scale-[0.97] blur-sm opacity-50 pointer-events-none' : 'scale-100 opacity-100'
                 }`}>
-
                 <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
                     <div className="flex items-center gap-5">
                         <div className="p-4 bg-orange-500 rounded-[1.5rem] text-white shadow-2xl shadow-orange-500/20">
@@ -89,7 +82,7 @@ export const PatientsPage = () => {
                                 Base de <span className="font-bold">Pacientes</span>
                             </h1>
                             <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 font-light">
-                                <span className="dark:text-adaptia-mint font-bold">{filteredPatients.length}</span> expedientes clínicos activos
+                                <span className="dark:text-adaptia-mint font-bold">{filteredPatients.length}</span> expedientes activos
                             </p>
                         </div>
                     </div>
@@ -101,13 +94,12 @@ export const PatientsPage = () => {
                     </button>
                 </header>
 
-                {/* BUSCADOR */}
                 <div className="flex gap-4 mb-10 group">
                     <div className="relative flex-1">
                         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-adaptia-blue transition-colors" size={20} />
                         <input
                             type="text"
-                            placeholder="Buscar por nombre, DNI o expediente..."
+                            placeholder="Buscar por nombre, DNI o email..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full pl-14 pr-6 py-4.5 bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2rem] text-sm outline-none focus:ring-8 focus:ring-adaptia-blue/5 transition-all dark:text-white shadow-sm"
@@ -118,27 +110,21 @@ export const PatientsPage = () => {
                     </button>
                 </div>
 
-                {/* TABLA DE PACIENTES */}
                 <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] shadow-2xl overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left min-w-[800px] border-collapse">
+                        <table className="w-full text-left min-w-[800px]">
                             <thead className="bg-gray-50/50 dark:bg-white/5 text-gray-400 dark:text-gray-500">
                                 <tr className="text-[10px] font-black uppercase tracking-[0.2em]">
                                     <th className="px-10 py-6">Identidad</th>
                                     <th className="px-10 py-6">Contacto</th>
-                                    <th className="px-10 py-6">Estatus / Propiedad</th>
+                                    <th className="px-10 py-6">Estatus</th>
                                     <th className="px-10 py-6 text-right">Ficha</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-dark-border">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="4" className="px-10 py-32 text-center">
-                                            <div className="flex flex-col items-center gap-4">
-                                                <div className="w-12 h-12 border-4 border-adaptia-blue/20 border-t-adaptia-blue rounded-full animate-spin" />
-                                                <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Sincronizando registros...</span>
-                                            </div>
-                                        </td>
+                                        <td colSpan="4" className="px-10 py-32 text-center text-gray-400 uppercase text-[10px] font-bold tracking-widest">Sincronizando...</td>
                                     </tr>
                                 ) : filteredPatients.map((patient) => (
                                     <tr
@@ -149,39 +135,32 @@ export const PatientsPage = () => {
                                     >
                                         <td className="px-10 py-6">
                                             <div className="flex items-center gap-5">
-                                                <div className="w-12 h-12 bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-2xl flex items-center justify-center font-bold text-sm border border-orange-500/10 group-hover:scale-110 transition-transform">
+                                                <div className="w-12 h-12 bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-2xl flex items-center justify-center font-bold text-sm border border-orange-500/10">
                                                     {patient.name.charAt(0)}
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-gray-900 dark:text-gray-100 leading-tight group-hover:text-adaptia-blue transition-colors">
                                                         {patient.name}
                                                     </p>
-                                                    <p className="text-[10px] text-gray-400 font-mono mt-1 tracking-tighter">
-                                                        ID-{patient.history?.dni || 'P-0' + patient.id}
+                                                    <p className="text-[10px] text-gray-400 font-mono mt-1">
+                                                        DNI: {patient.dni || 'S/D'}
                                                     </p>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-10 py-6 text-gray-500 dark:text-gray-400">
-                                            <div className="text-[11px] space-y-1.5 font-medium">
-                                                <p className="flex items-center gap-2 group-hover:text-gray-700 dark:group-hover:text-gray-200">
-                                                    <Mail size={13} className="text-gray-300 dark:text-gray-600" /> {patient.history?.email || '—'}
-                                                </p>
-                                                <p className="flex items-center gap-2 group-hover:text-gray-700 dark:group-hover:text-gray-200">
-                                                    <Phone size={13} className="text-gray-300 dark:text-gray-600" /> {patient.history?.phone || '—'}
-                                                </p>
+                                            <div className="text-[11px] space-y-1 font-medium">
+                                                <p className="flex items-center gap-2"><Mail size={13} /> {patient.email || '—'}</p>
+                                                <p className="flex items-center gap-2"><Phone size={13} /> {patient.phone || '—'}</p>
                                             </div>
                                         </td>
                                         <td className="px-10 py-6">
                                             <span className="inline-flex items-center gap-2 px-3 py-1 bg-adaptia-blue/5 text-adaptia-blue dark:text-adaptia-mint rounded-full text-[9px] font-black uppercase tracking-widest border border-adaptia-blue/10">
-                                                <ShieldCheck size={12} strokeWidth={2.5} /> {patient.owner_name || 'Mi Registro'}
+                                                <ShieldCheck size={12} /> {patient.owner_name || 'Mi Registro'}
                                             </span>
                                         </td>
                                         <td className="px-10 py-6 text-right">
-                                            <div className="flex justify-end items-center gap-2 text-gray-300 dark:text-gray-700 group-hover:text-adaptia-mint transition-all">
-                                                <span className="text-[9px] font-black uppercase tracking-[0.15em] opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all">Detalles</span>
-                                                <ChevronRight size={18} />
-                                            </div>
+                                            <ChevronRight className="inline text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
                                         </td>
                                     </tr>
                                 ))}
@@ -191,14 +170,12 @@ export const PatientsPage = () => {
                 </div>
             </div>
 
-            {/* PANEL LATERAL DE DETALLES */}
             <PatientDetailsPanel
                 patient={selectedPatient}
                 onClose={closePanel}
                 onOpenNote={() => setIsNoteModalOpen(true)}
             />
 
-            {/* MODAL PARA NUEVAS NOTAS */}
             <ClinicalNoteModal
                 isOpen={isNoteModalOpen}
                 patientName={selectedPatient?.name}
