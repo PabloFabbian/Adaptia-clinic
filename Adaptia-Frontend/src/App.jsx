@@ -23,14 +23,12 @@ import { PlusCircle, Wallet, Trash2 } from 'lucide-react';
 
 function App() {
   const { user, loading } = useAuth();
-  // Extraemos fetchAppointments para pasarlo a Settings si es necesario refrescar tras cambios
   const { appointments, fetchAppointments } = useAppointments();
 
   if (loading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-white dark:bg-dark-bg transition-colors duration-500">
         <div className="flex flex-col items-center gap-6">
-          {/* Spinner elegante acorde a tu UI */}
           <div className="w-12 h-12 border-4 border-adaptia-blue/20 border-t-adaptia-blue rounded-full animate-spin" />
           <div className="text-gray-400 dark:text-gray-500 font-medium italic animate-pulse tracking-widest text-xs uppercase">
             Sincronizando con Adaptia Cloud...
@@ -51,7 +49,7 @@ function App() {
           style: {
             borderRadius: '1.25rem',
             padding: '1rem',
-            background: 'var(--toast-bg)', // Puedes vincularlo a tu CSS variable de modo oscuro
+            background: 'var(--toast-bg)',
           },
         }}
       />
@@ -60,20 +58,25 @@ function App() {
         {!user ? (
           <>
             <Route path="/login" element={<Login />} />
-            {/* Redirección automática si intenta entrar a cualquier ruta sin sesión */}
             <Route path="*" element={<Navigate to="/login" replace />} />
           </>
         ) : (
           <Route path="/" element={<Layout />}>
-            {/* VISTA PRINCIPAL: DASHBOARD */}
+            {/* VISTA PRINCIPAL */}
             <Route index element={<Dashboard user={user} appointments={appointments} />} />
 
-            {/* GESTIÓN DE PACIENTES (FEATURE: PATIENTS) */}
-            <Route path="pacientes" element={<PatientsPage />} />
-            <Route path="pacientes/:id/historial" element={<PatientHistoryPage />} />
+            {/* GESTIÓN DE PACIENTES */}
+            <Route path="pacientes">
+              <Route index element={<PatientsPage />} />
+              <Route path=":id/historial" element={<PatientHistoryPage />} />
+              {/* Ruta corregida para que coincida con la navegación del Panel */}
+              <Route path="editar/:id" element={<NewPatient />} />
+            </Route>
+
+            {/* Crear nuevo paciente (fuera del grupo /pacientes para mantener url limpia) */}
             <Route path="nuevo-paciente" element={<NewPatient />} />
 
-            {/* GESTIÓN OPERATIVA (FEATURE: APPOINTMENTS) */}
+            {/* GESTIÓN OPERATIVA */}
             <Route path="citas" element={<AppointmentsPage />} />
             <Route path="calendario" element={<CalendarPage />} />
 
@@ -81,18 +84,21 @@ function App() {
             <Route path="facturacion" element={<BillingPage mode="list" />} />
             <Route path="nueva-factura" element={<BillingPage mode="create" />} />
 
-            {/* CONFIGURACIÓN Y PERMISOS (FEATURE: CLINICS) */}
+            {/* CONFIGURACIÓN Y SISTEMA */}
             <Route path="clinicas" element={<Clinics />} />
             <Route path="settings" element={<Settings fetchAppointments={fetchAppointments} />} />
             <Route path="categorias" element={<CategoriesPage />} />
 
-            {/* ACCESOS RÁPIDOS / PLACEHOLDERS */}
+            {/* ACCESOS RÁPIDOS */}
             <Route path="agendar" element={<PlaceholderPage title="Agendar Cita" icon={PlusCircle} color="bg-blue-500" />} />
             <Route path="registrar-gasto" element={<PlaceholderPage title="Registrar Gasto" icon={Wallet} color="bg-red-500" />} />
             <Route path="papelera" element={<PlaceholderPage title="Papelera" icon={Trash2} color="bg-gray-700" />} />
 
-            {/* SEGURIDAD: Si está logueado e intenta ir a login, vuelve al home */}
+            {/* SEGURIDAD */}
             <Route path="login" element={<Navigate to="/" replace />} />
+
+            {/* Fallback para rutas no encontradas dentro del layout */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         )}
       </Routes>

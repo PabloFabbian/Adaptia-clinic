@@ -6,7 +6,7 @@ const { Pool } = pg;
 
 import { createDatabaseSchema } from './src/auth/models.js';
 import { getResourceFilter } from './src/auth/permissions.js';
-import patientRouter from './src/patients/patients.js'; // Importamos el router modular
+import patientRouter from './src/patients/patients.js';
 
 const app = express();
 app.use(cors());
@@ -14,13 +14,13 @@ app.use(express.json());
 
 const PORT = 3001;
 
-// --- 1. CONFIGURACIÓN DE POSTGRESQL (Neon Cloud) ---
+// --- 1. CONFIGURACIÓN DE POSTGRESQL ---
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// Middleware para inyectar el pool en cada request
+// Middleware para inyectar el pool en cada request (Crítico para que patientRouter funcione)
 app.use((req, res, next) => {
     req.pool = pool;
     next();
@@ -32,7 +32,6 @@ pool.query(createDatabaseSchema)
     .catch(err => console.error("❌ Error DB:", err));
 
 // --- 3. ENDPOINTS DE AUTENTICACIÓN ---
-
 app.post('/api/auth/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -54,12 +53,9 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // --- 4. RUTAS MODULARES ---
-
-// Todas las rutas de pacientes (GET /, PUT /:id, GET /:id/export-pdf)
 app.use('/api/patients', patientRouter);
 
 // --- 5. OTROS RECURSOS ---
-
 app.get('/', (req, res) => res.send('🚀 Adaptia API Operativa'));
 
 // CITAS
@@ -89,7 +85,7 @@ app.get(['/api/appointments', '/api/appointments/all'], async (req, res) => {
     }
 });
 
-// HISTORIAL DE NOTAS (Específico para la vista de HistoryPage)
+// HISTORIAL DE NOTAS
 app.get('/api/patients/:id/notes', async (req, res) => {
     const { id } = req.params;
     try {
@@ -108,14 +104,10 @@ app.get('/api/patients/:id/notes', async (req, res) => {
     }
 });
 
-// --- 6. ESCRITURA DE NOTAS ---
-
+// ESCRITURA DE NOTAS
 app.post('/api/clinical-notes', async (req, res) => {
     const { patient_id, member_id, content, title, summary, category } = req.body;
-
-    if (!patient_id || !content) {
-        return res.status(400).json({ error: "Falta el ID del paciente o el contenido de la nota." });
-    }
+    if (!patient_id || !content) return res.status(400).json({ error: "Datos incompletos" });
 
     try {
         const query = `
@@ -123,23 +115,12 @@ app.post('/api/clinical-notes', async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, NOW())
             RETURNING *;
         `;
-
-        const values = [
-            patient_id,
-            member_id || 1,
-            content,
-            title || 'Nota de Evolución',
-            summary || '',
-            category || 'Evolución'
-        ];
-
+        const values = [patient_id, member_id || 1, content, title || 'Nota', summary || '', category || 'Evolución'];
         const { rows } = await req.pool.query(query, values);
-        console.log(`✅ Nota guardada para paciente #${patient_id}`);
         res.status(201).json({ success: true, data: rows[0] });
-
     } catch (err) {
-        console.error("❌ Error SQL al guardar nota:", err.message);
-        res.status(500).json({ error: "Error interno en la base de datos" });
+        console.error("❌ Error SQL:", err.message);
+        res.status(500).json({ error: "Error interno" });
     }
 });
 

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Mail, Phone, MapPin, FileText, ExternalLink, Clock, Calendar, Shield } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { X, Mail, Phone, MapPin, FileText, ExternalLink, Clock, Calendar, Shield, Edit3 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 export const PatientDetailsPanel = ({ patient, onClose, onOpenNote }) => {
+    const navigate = useNavigate();
     const [recentNotes, setRecentNotes] = useState([]);
     const [loadingNotes, setLoadingNotes] = useState(false);
 
@@ -30,11 +31,23 @@ export const PatientDetailsPanel = ({ patient, onClose, onOpenNote }) => {
     return (
         <div className="fixed right-0 top-0 h-screen w-[400px] bg-white dark:bg-dark-surface shadow-[-20px_0_50px_rgba(0,0,0,0.05)] dark:shadow-[-20px_0_50px_rgba(0,0,0,0.3)] z-40 animate-in slide-in-from-right duration-500 border-l border-gray-100 dark:border-dark-border flex flex-col">
             <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
+                {/* Cabecera de Acciones Rápidas */}
                 <div className="flex justify-between items-center mb-10">
-                    <button onClick={onClose} className="p-2.5 hover:bg-gray-100 dark:hover:bg-dark-border rounded-2xl text-gray-400 transition-all">
+                    <button
+                        onClick={onClose}
+                        className="p-2.5 hover:bg-gray-100 dark:hover:bg-dark-border rounded-2xl text-gray-400 transition-all"
+                    >
                         <X size={24} />
                     </button>
-                    <span className="text-[10px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-[0.2em]">Expediente Digital</span>
+
+                    {/* BOTÓN EDITAR PERFIL */}
+                    <button
+                        onClick={() => navigate(`/pacientes/editar/${patient.id}`)}
+                        className="flex items-center gap-2 px-4 py-2 text-[10px] font-black text-adaptia-blue hover:bg-adaptia-blue/5 rounded-xl uppercase tracking-widest transition-all group"
+                    >
+                        <Edit3 size={14} className="group-hover:rotate-12 transition-transform" />
+                        Editar Perfil
+                    </button>
                 </div>
 
                 {/* Avatar y Encabezado Principal */}
@@ -42,7 +55,9 @@ export const PatientDetailsPanel = ({ patient, onClose, onOpenNote }) => {
                     <div className="w-24 h-24 bg-gradient-to-br from-orange-400 to-orange-600 rounded-[2.5rem] flex items-center justify-center text-white text-3xl font-bold shadow-2xl shadow-orange-500/20 mb-4">
                         {patient.name.charAt(0)}
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">{patient.name}</h2>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
+                        {patient.name}
+                    </h2>
                     <p className="text-[10px] text-adaptia-blue font-black uppercase tracking-widest mt-1">
                         DNI: {patient.dni || 'Sin Documento'}
                     </p>
@@ -62,7 +77,9 @@ export const PatientDetailsPanel = ({ patient, onClose, onOpenNote }) => {
                                 recentNotes.map(note => (
                                     <div key={note.id} className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-dark-border">
                                         <p className="text-[10px] font-bold text-adaptia-blue mb-1">{note.category}</p>
-                                        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 italic">"{note.summary || note.content}"</p>
+                                        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 italic">
+                                            "{note.summary || note.content}"
+                                        </p>
                                     </div>
                                 ))
                             ) : (
@@ -71,7 +88,7 @@ export const PatientDetailsPanel = ({ patient, onClose, onOpenNote }) => {
                         </div>
                     </section>
 
-                    {/* Sección 2: Información de Contacto (Columnas Normalizadas) */}
+                    {/* Sección 2: Información de Contacto */}
                     <section className="space-y-4">
                         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-dark-border pb-3">Contacto</h3>
                         <div className="grid gap-3">
@@ -81,7 +98,7 @@ export const PatientDetailsPanel = ({ patient, onClose, onOpenNote }) => {
                         </div>
                     </section>
 
-                    {/* Sección 3: Datos Clínicos/Personales */}
+                    {/* Sección 3: Datos Clínicos */}
                     <section className="space-y-4">
                         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-50 dark:border-dark-border pb-3">Ficha Médica</h3>
                         <div className="grid gap-3">
