@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Tabs } from '../components/ui/Tabs';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import { InviteMemberModal } from '../features/clinics/components/InviteMemberModal';
 import {
     Home, Users, Briefcase, Calendar,
     ArrowLeft, ExternalLink, UserPlus, Layout,
-    ShieldCheck, Globe, Activity, Settings
+    ShieldCheck, Globe, Activity, Settings, Mail
 } from 'lucide-react';
 
 const clinicTabs = [
@@ -25,6 +26,10 @@ const rolesData = [
 
 export const Clinics = () => {
     const [activeTab, setActiveTab] = useState('roles');
+    const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+
+    // En un entorno real, esto vendría de un context de la clínica seleccionada
+    const clinicId = 1;
 
     return (
         <div className="max-w-6xl mx-auto animate-in fade-in duration-700">
@@ -72,32 +77,27 @@ export const Clinics = () => {
                                     <ShieldCheck className="text-blue-400 dark:text-adaptia-blue w-5 h-5 shrink-0" strokeWidth={1.5} />
                                 </div>
                                 <div>
-                                    <p className="font-medium text-gray-700 dark:text-gray-200">Protección de Datos</p>
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 font-light mt-1 text-balance italic">GDPR / HIPAA activo.</p>
+                                    <p className="font-medium text-gray-700 dark:text-gray-200">Privacidad Pro</p>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500 font-light mt-1 text-balance italic">Los miembros controlan sus recursos.</p>
                                 </div>
                             </div>
-                            <div className="flex items-start gap-3 text-sm">
-                                <div className="p-2 rounded-lg bg-gray-50 dark:bg-white/5">
-                                    <Globe className="text-gray-300 dark:text-gray-600 w-5 h-5 shrink-0" strokeWidth={1.5} />
-                                </div>
-                                <div>
-                                    <p className="font-medium text-gray-700 dark:text-gray-200">Visibilidad Global</p>
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 font-light mt-1 italic">Privada (Solo invitados).</p>
-                                </div>
-                            </div>
-                            <Button variant="secondary" className="w-full justify-center text-[10px] font-bold uppercase tracking-widest mt-3 dark:bg-white/5 dark:hover:bg-white/10 dark:border-dark-border">
-                                <Settings size={14} strokeWidth={1.5} /> Ajustes de Sede
+                            <Button
+                                variant="secondary"
+                                onClick={() => setIsInviteModalOpen(true)}
+                                className="w-full justify-center text-[10px] font-bold uppercase tracking-widest mt-3 dark:bg-white/5 dark:hover:bg-white/10"
+                            >
+                                <Mail size={14} strokeWidth={1.5} /> Invitar Profesional
                             </Button>
                         </div>
                     </Card>
                 </div>
 
-                {/* Principal: Gestión de Roles */}
+                {/* Principal */}
                 <div className="col-span-12 lg:col-span-9">
                     {activeTab === 'roles' && (
                         <Card
-                            title="Gestión de Roles y Capacidades"
-                            extra={<Button variant="primary" className="bg-gray-900 dark:bg-adaptia-blue text-xs">+ Nuevo rol</Button>}
+                            title="Capacidades por Rol"
+                            extra={<Button variant="primary" className="bg-gray-900 dark:bg-adaptia-blue text-xs">+ Definir Rol</Button>}
                         >
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
@@ -111,7 +111,7 @@ export const Clinics = () => {
                                     </thead>
                                     <tbody className="divide-y divide-gray-50 dark:divide-dark-border">
                                         {rolesData.map((role) => (
-                                            <tr key={role.name} className="group hover:bg-adaptia-blue/[0.03] dark:hover:bg-adaptia-mint/[0.02] transition-all duration-300">
+                                            <tr key={role.name} className="group hover:bg-adaptia-blue/[0.03] transition-all duration-300">
                                                 <td className="px-6 py-5">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-1.5 h-1.5 rounded-full bg-blue-400 dark:bg-adaptia-mint shadow-[0_0_8px_rgba(80,227,194,0.4)]"></div>
@@ -127,8 +127,8 @@ export const Clinics = () => {
                                                     {role.description}
                                                 </td>
                                                 <td className="px-6 py-5 text-right">
-                                                    <button className="opacity-0 group-hover:opacity-100 transition-all text-[11px] font-bold flex items-center gap-1.5 ml-auto text-blue-500 dark:text-adaptia-blue hover:text-adaptia-mint">
-                                                        Gestionar <ExternalLink size={12} strokeWidth={2} />
+                                                    <button className="opacity-0 group-hover:opacity-100 transition-all text-[11px] font-bold text-blue-500 dark:text-adaptia-blue flex items-center gap-1.5 ml-auto">
+                                                        Gestionar <ExternalLink size={12} />
                                                     </button>
                                                 </td>
                                             </tr>
@@ -139,7 +139,27 @@ export const Clinics = () => {
                         </Card>
                     )}
 
-                    {activeTab !== 'roles' && (
+                    {activeTab === 'miembros' && (
+                        <Card title="Directorio de Miembros">
+                            <div className="p-6">
+                                <MemberList clinicId={clinicId} />
+
+                                {/* Botón flotante o al final para invitar si está vacío */}
+                                <div className="mt-8 pt-6 border-t border-gray-100 dark:border-dark-border flex justify-center">
+                                    <Button
+                                        variant="primary"
+                                        onClick={() => setIsInviteModalOpen(true)}
+                                        className="bg-gray-900 dark:bg-adaptia-blue text-xs"
+                                    >
+                                        + Invitar nuevo profesional
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* Estados de carga para otros módulos */}
+                    {['inicio', 'salas', 'citas'].includes(activeTab) && (
                         <div className="flex flex-col items-center justify-center py-24 border border-dashed border-gray-200 dark:border-dark-border rounded-[2.5rem] bg-gray-50/30 dark:bg-dark-surface/30 backdrop-blur-sm">
                             <div className="p-4 bg-white dark:bg-dark-surface rounded-2xl shadow-xl mb-4 text-gray-300 dark:text-gray-700">
                                 <Activity size={32} strokeWidth={1} />
@@ -150,6 +170,17 @@ export const Clinics = () => {
                     )}
                 </div>
             </div>
+
+            {/* Modal de Invitación */}
+            <InviteMemberModal
+                isOpen={isInviteModalOpen}
+                onClose={() => setIsInviteModalOpen(false)}
+                clinicId={clinicId}
+                onInviteSuccess={(newInv) => {
+                    console.log("Invitación enviada con éxito:", newInv);
+                    // Aquí podrías disparar una notificación de éxito
+                }}
+            />
         </div>
     );
 };
