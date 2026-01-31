@@ -2,15 +2,24 @@ import { Sidebar } from './Sidebar';
 import { ArrowLeft, LogOut, Settings, User, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 
 export const Layout = () => {
-    const { logout, user } = useAuth();
+    const { logout, user, activeClinic } = useAuth(); // Extraemos activeClinic
     const navigate = useNavigate();
     const location = useLocation();
 
     // Estado para Dark Mode
     const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+    // --- LÓGICA DINÁMICA DE ROL ---
+    // Buscamos el rol del usuario en la clínica activa o el rol global
+    const userRoleDisplay = useMemo(() => {
+        if (!user) return 'Invitado';
+
+        // Si tienes la información del rol dentro del objeto user o activeClinic:
+        return user.role_name || activeClinic?.role_name || 'Profesional';
+    }, [user, activeClinic]);
 
     const toggleTheme = () => {
         const switchTheme = () => {
@@ -25,12 +34,10 @@ export const Layout = () => {
             }
         };
 
-        // Soporte para View Transitions API
         if (!document.startViewTransition) {
             switchTheme();
             return;
         }
-
         document.startViewTransition(switchTheme);
     };
 
@@ -39,6 +46,7 @@ export const Layout = () => {
         if (path === '/') return 'Dashboard';
         if (path.includes('pacientes')) return 'Gestión de Pacientes';
         if (path.includes('citas')) return 'Agenda Médica';
+        if (path.includes('clinicas')) return 'Administración de Sedes';
         return 'Panel de Control';
     };
 
@@ -47,13 +55,10 @@ export const Layout = () => {
             <Sidebar />
 
             <main className="flex-1 flex flex-col overflow-hidden">
-                {/* Header con Glow Inferior Menta */}
                 <header className="
                     h-16 flex items-center justify-between px-10 transition-colors z-20
                     bg-white/80 dark:bg-dark-surface/80 backdrop-blur-md
-                    /* Borde inferior brillante */
                     border-b border-[#50e3c2] dark:border-[#50e3c2]/30
-                    /* Glow hacia abajo */
                     shadow-[0_1px_10px_rgba(80,227,194,0.1)] dark:shadow-[0_4px_20px_rgba(80,227,194,0.05)]
                 ">
                     <div className="flex items-center">
@@ -69,17 +74,19 @@ export const Layout = () => {
                     </div>
 
                     <div className="flex items-center gap-6">
-                        {/* Perfil de usuario */}
+                        {/* Perfil de usuario DINÁMICO */}
                         <div className="flex items-center gap-3 pr-6 border-r border-gray-100 dark:border-dark-border">
                             <div className="text-right hidden sm:block">
                                 <p className="text-xs font-bold text-gray-900 dark:text-gray-100 leading-none">
-                                    {user?.name || 'Profesional'}
+                                    {user?.name || 'Cargando...'}
                                 </p>
-                                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 uppercase tracking-tighter">
-                                    Psicólogo Clínico
+                                <p className={`text-[10px] mt-1 uppercase tracking-widest font-bold ${userRoleDisplay === 'Tech Owner' ? 'text-adaptia-mint' : 'text-gray-400 dark:text-gray-500'
+                                    }`}>
+                                    {userRoleDisplay}
                                 </p>
                             </div>
-                            <div className="h-9 w-9 rounded-xl bg-gray-900 dark:bg-adaptia-blue flex items-center justify-center text-white shadow-lg">
+                            <div className={`h-9 w-9 rounded-xl flex items-center justify-center text-white shadow-lg transition-colors ${userRoleDisplay === 'Tech Owner' ? 'bg-adaptia-mint' : 'bg-gray-900 dark:bg-adaptia-blue'
+                                }`}>
                                 <User size={18} />
                             </div>
                         </div>
@@ -111,7 +118,6 @@ export const Layout = () => {
                     </div>
                 </header>
 
-                {/* Contenedor de Contenido */}
                 <div className="flex-1 overflow-y-auto px-10 py-8 bg-gray-50/30 dark:bg-dark-bg transition-colors">
                     <Outlet />
                 </div>

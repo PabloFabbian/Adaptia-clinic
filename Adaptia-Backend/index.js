@@ -7,6 +7,7 @@ const { Pool } = pg;
 import { createDatabaseSchema } from './src/auth/models.js';
 import { getResourceFilter } from './src/auth/permissions.js';
 import patientRouter from './src/patients/patients.js';
+import clinicRouter from './src/clinics/clinics.js';
 
 const app = express();
 app.use(cors());
@@ -75,6 +76,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.use('/api/patients', patientRouter);
+app.use('/api/clinics', clinicRouter);
 
 // --- ENDPOINTS DE NOTAS CLÍNICAS ---
 

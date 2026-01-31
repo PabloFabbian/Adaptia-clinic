@@ -17,19 +17,28 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
     }, []);
 
+    /**
+     * LOGIN: Estandarizamos para que el objeto tenga siempre 'role_name'
+     */
     const login = (userData) => {
-        // Guardamos los datos del usuario que vienen del backend (id, name, email, role, activeClinicId)
-        setUser(userData);
-        localStorage.setItem('adaptia_user', JSON.stringify(userData));
+        // Normalizamos el objeto user para que siempre use role_name
+        const normalizedUser = {
+            ...userData,
+            role_name: userData.role_name || userData.role // Soporta ambas versiones del backend
+        };
 
-        // Si el backend nos mandó una clínica activa por defecto, la configuramos
+        setUser(normalizedUser);
+        localStorage.setItem('adaptia_user', JSON.stringify(normalizedUser));
+
+        // Si el backend envía datos de la clínica (id Y nombre)
         if (userData.activeClinicId) {
-            const defaultClinic = {
+            const clinicData = {
                 id: userData.activeClinicId,
-                role_name: userData.role // Mapeamos el rol que viene del login
+                name: userData.clinicName || 'Mi Clínica', // IMPORTANTE: Guardamos el nombre para el Header
+                role_name: normalizedUser.role_name
             };
-            setActiveClinic(defaultClinic);
-            localStorage.setItem('adaptia_active_clinic', JSON.stringify(defaultClinic));
+            setActiveClinic(clinicData);
+            localStorage.setItem('adaptia_active_clinic', JSON.stringify(clinicData));
         }
     };
 
@@ -41,29 +50,26 @@ export const AuthProvider = ({ children }) => {
     };
 
     const switchClinic = (membership) => {
-        setActiveClinic(membership);
-        localStorage.setItem('adaptia_active_clinic', JSON.stringify(membership));
+        // 'membership' debe ser el objeto completo de la tabla members con clinic.name
+        const newActiveClinic = {
+            id: membership.clinic_id,
+            name: membership.clinic?.name || membership.name,
+            role_name: membership.role?.name || membership.role_name
+        };
+        setActiveClinic(newActiveClinic);
+        localStorage.setItem('adaptia_active_clinic', JSON.stringify(newActiveClinic));
     };
 
     /**
-     * VERIFICACIÓN DE ROLES MEJORADA
+     * VERIFICACIÓN DE ROLES (La fuente de verdad para la UI)
      */
     const hasRole = (allowedRoles) => {
-        if (!user) return false;
-
         const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
 
-        // 1. Prioridad: Verificar rol global del usuario (Lo que guardamos al loguear)
-        if (user.role && rolesArray.includes(user.role)) {
-            return true;
-        }
+        // Priorizamos el rol que tiene el usuario en la clínica activa actualmente
+        const currentRole = activeClinic?.role_name || user?.role_name;
 
-        // 2. Verificación por clínica activa (Fallback)
-        if (activeClinic && rolesArray.includes(activeClinic.role_name)) {
-            return true;
-        }
-
-        return false;
+        return rolesArray.includes(currentRole);
     };
 
     return (
@@ -74,7 +80,7 @@ export const AuthProvider = ({ children }) => {
             loading,
             activeClinic,
             switchClinic,
-            hasRole
+            hasRole // Ahora podemos usar esto en Clinics.jsx
         }}>
             {!loading && children}
         </AuthContext.Provider>

@@ -90,7 +90,7 @@ export const Sidebar = () => {
                     to="/clinicas"
                     label="Clínicas"
                     icon={Building2}
-                    hidden={!hasRole(['Owner', 'Administrador', 'tech'])}
+                    hidden={!hasRole(['Tech Owner', 'Owner', 'Administrador'])}
                 />
             </nav>
 

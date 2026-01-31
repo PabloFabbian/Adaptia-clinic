@@ -1,26 +1,34 @@
 import { useState, useEffect } from 'react';
-import { Mail, Shield, X, Loader2, Send } from 'lucide-react';
+import { useAuth } from '../../../context/AuthContext'; // Importante para el ID del owner
+import { Mail, Shield, X, Loader2, Send, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 
-export const InviteMemberModal = ({ isOpen, onClose, clinicId, onInviteSuccess }) => {
+export const InviteMemberModal = ({ isOpen, onClose, onSuccess }) => {
+    const { user, activeClinic } = useAuth(); // Obtenemos el usuario logueado y la clínica activa
     const [email, setEmail] = useState('');
     const [roleId, setRoleId] = useState('');
     const [roles, setRoles] = useState([]);
     const [loading, setLoading] = useState(false);
     const [fetchingRoles, setFetchingRoles] = useState(true);
+    const [sentStatus, setSentStatus] = useState(false);
 
-    // Cargar los roles disponibles al abrir el modal
+    // Cargar los roles de gobernanza disponibles
     useEffect(() => {
         if (isOpen) {
             const fetchRoles = async () => {
+                setFetchingRoles(true);
                 try {
                     const response = await fetch(`${import.meta.env.VITE_API_URL}/api/roles`);
                     const data = await response.json();
-                    setRoles(data);
-                    if (data.length > 0) setRoleId(data[0].id);
+
+                    // Filtramos para no permitir invitar a otro "Owner" si es necesario
+                    const availableRoles = data.filter(r => r.name !== 'Owner');
+                    setRoles(availableRoles);
+
+                    if (availableRoles.length > 0) setRoleId(availableRoles[0].id);
                 } catch (error) {
-                    console.error("Error cargando roles:", error);
+                    console.error("❌ Error cargando roles:", error);
                 } finally {
                     setFetchingRoles(false);
                 }
@@ -31,113 +39,148 @@ export const InviteMemberModal = ({ isOpen, onClose, clinicId, onInviteSuccess }
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
+        if (!activeClinic?.id) return;
 
+        setLoading(true);
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/patients/${clinicId}/invitations`, {
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clinics/${activeClinic.id}/invitations`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     email,
                     role_id: roleId,
-                    invited_by: 1 // Aquí deberías usar el ID del usuario logueado desde AuthContext
+                    invited_by: user.id // Dinámico: Pablo o el admin actual
                 }),
             });
 
             if (!response.ok) throw new Error('Error al enviar invitación');
 
-            const result = await response.json();
-            onInviteSuccess(result.invitation);
-            onClose();
-            setEmail('');
+            setSentStatus(true);
+
+            // Pequeño delay para mostrar el feedback visual de éxito
+            setTimeout(() => {
+                onSuccess(); // Refresca el directorio en Clinics.jsx
+                handleClose();
+            }, 1500);
+
         } catch (error) {
-            alert("No se pudo enviar la invitación");
+            console.error("❌ Error:", error);
+            alert("No se pudo procesar la invitación. Verifica los datos.");
         } finally {
             setLoading(false);
         }
     };
 
+    const handleClose = () => {
+        setEmail('');
+        setSentStatus(false);
+        onClose();
+    };
+
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="w-full max-w-md p-4">
-                <Card className="shadow-2xl border-dark-border overflow-hidden">
-                    <div className="p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300 p-4">
+            <div className="w-full max-w-md">
+                <Card className="shadow-2xl border-white/5 overflow-hidden bg-white dark:bg-[#1a1f2b]">
+                    <div className="p-8">
                         {/* Header */}
-                        <div className="flex justify-between items-start mb-6">
+                        <div className="flex justify-between items-start mb-8">
                             <div>
-                                <h2 className="text-xl font-medium text-gray-800 dark:text-white">Invitar Miembro</h2>
-                                <p className="text-xs text-gray-400 mt-1 italic">Vincular un nuevo profesional a la sede.</p>
+                                <h2 className="text-2xl font-semibold text-gray-800 dark:text-white tracking-tight">Expandir Red</h2>
+                                <p className="text-xs text-gray-400 mt-1 font-light italic">
+                                    El nuevo miembro mantendrá su soberanía de datos.
+                                </p>
                             </div>
-                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 transition-colors">
                                 <X size={20} strokeWidth={1.5} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {/* Input Email */}
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Email Profesional</label>
-                                <div className="relative group">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-adaptia-blue transition-colors" size={16} />
-                                    <input
-                                        required
-                                        type="email"
-                                        placeholder="ejemplo@profesional.com"
-                                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-dark-border rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-adaptia-blue/20 transition-all text-gray-700 dark:text-gray-200"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                    />
+                        {sentStatus ? (
+                            <div className="py-10 text-center animate-in zoom-in duration-300">
+                                <div className="w-16 h-16 bg-adaptia-mint/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <CheckCircle2 className="text-adaptia-mint" size={32} />
                                 </div>
+                                <h3 className="text-white font-medium">¡Invitación Enviada!</h3>
+                                <p className="text-gray-400 text-xs mt-2">Se ha enviado el acceso a {email}</p>
                             </div>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                {/* Email */}
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block">Email Profesional</label>
+                                    <div className="relative group">
+                                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-adaptia-mint transition-colors" size={16} />
+                                        <input
+                                            required
+                                            type="email"
+                                            placeholder="doctor@ejemplo.com"
+                                            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-adaptia-mint/20 transition-all text-white"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
 
-                            {/* Select Role */}
-                            <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Asignar Rol Inicial</label>
-                                <div className="relative group">
-                                    <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                    <select
-                                        disabled={fetchingRoles}
-                                        className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-dark-border rounded-xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-adaptia-blue/20 transition-all text-gray-700 dark:text-gray-200 appearance-none disabled:opacity-50"
-                                        value={roleId}
-                                        onChange={(e) => setRoleId(e.target.value)}
+                                {/* Rol */}
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block">Nivel de Gobernanza</label>
+                                    <div className="relative group">
+                                        <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <select
+                                            disabled={fetchingRoles}
+                                            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-2xl py-4 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-adaptia-mint/20 transition-all text-white appearance-none disabled:opacity-50"
+                                            value={roleId}
+                                            onChange={(e) => setRoleId(e.target.value)}
+                                        >
+                                            {fetchingRoles ? (
+                                                <option>Cargando roles...</option>
+                                            ) : (
+                                                roles.map(role => (
+                                                    <option key={role.id} value={role.id} className="bg-[#1a1f2b] text-white">
+                                                        {role.name}
+                                                    </option>
+                                                ))
+                                            )}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Info Box */}
+                                <div className="bg-adaptia-mint/5 border border-adaptia-mint/10 rounded-2xl p-4">
+                                    <p className="text-[10px] text-adaptia-mint/80 leading-relaxed">
+                                        💡 El colaborador invitado recibirá un correo para activar su cuenta. Por defecto, su información será privada hasta que otorgue consentimiento.
+                                    </p>
+                                </div>
+
+                                {/* Acciones */}
+                                <div className="flex gap-4 pt-4">
+                                    <Button
+                                        variant="secondary"
+                                        type="button"
+                                        onClick={handleClose}
+                                        className="flex-1 justify-center py-6 bg-white/5 border-white/10 text-gray-400 hover:text-white"
                                     >
-                                        {fetchingRoles ? (
-                                            <option>Cargando roles...</option>
+                                        Cancelar
+                                    </Button>
+                                    <Button
+                                        variant="primary"
+                                        type="submit"
+                                        disabled={loading || fetchingRoles || !email}
+                                        className="flex-1 justify-center py-6 bg-adaptia-mint text-black hover:bg-adaptia-mint/90 shadow-lg shadow-adaptia-mint/20"
+                                    >
+                                        {loading ? (
+                                            <Loader2 className="animate-spin" size={20} />
                                         ) : (
-                                            roles.map(role => (
-                                                <option key={role.id} value={role.id}>{role.name}</option>
-                                            ))
+                                            <span className="flex items-center gap-2 font-bold text-[11px] uppercase tracking-widest">
+                                                Enviar <Send size={14} />
+                                            </span>
                                         )}
-                                    </select>
+                                    </Button>
                                 </div>
-                            </div>
-
-                            {/* Nota informativa sobre gobernanza */}
-                            <div className="bg-blue-50/50 dark:bg-adaptia-blue/5 border border-blue-100/50 dark:border-adaptia-blue/10 rounded-xl p-4">
-                                <p className="text-[10px] text-blue-600 dark:text-adaptia-blue/80 leading-relaxed italic">
-                                    * Al aceptar, el miembro se unirá con acceso restringido. Deberá otorgar consentimiento explícito para compartir sus pacientes o agenda con la clínica.
-                                </p>
-                            </div>
-
-                            {/* Acciones */}
-                            <div className="flex gap-3 pt-2">
-                                <Button variant="secondary" type="button" onClick={onClose} className="flex-1 justify-center dark:bg-white/5">
-                                    Cancelar
-                                </Button>
-                                <Button
-                                    variant="primary"
-                                    type="submit"
-                                    disabled={loading || fetchingRoles}
-                                    className="flex-1 justify-center bg-gray-900 dark:bg-adaptia-blue"
-                                >
-                                    {loading ? <Loader2 className="animate-spin" size={18} /> : (
-                                        <>Enviar Invitación <Send size={14} className="ml-2" /></>
-                                    )}
-                                </Button>
-                            </div>
-                        </form>
+                            </form>
+                        )}
                     </div>
                 </Card>
             </div>
