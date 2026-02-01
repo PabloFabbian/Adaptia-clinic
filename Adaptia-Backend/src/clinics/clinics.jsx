@@ -1,23 +1,26 @@
 import express from 'express';
 import React from 'react';
 import { render } from '@react-email/render';
-import { Resend } from 'resend';
-import { InviteEmail } from '../emails/InviteEmail.jsx';
+import nodemailer from 'nodemailer';
+import InviteEmail from '../emails/InviteEmail.jsx';
 import { getRoles } from './roles.js';
 
 const router = express.Router();
 
-// Inicializamos Resend con tu API Key
-const resend = new Resend('re_QWE8Aegd_L76Y9WzH2pQZpXA8rUZYW9G8');
+// --- CONFIGURACIÓN DE NODEMAILER (Igual que en index para consistencia) ---
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
 
 // --- 1. CONFIGURACIÓN DE ROLES ---
 router.get('/roles', getRoles);
 
 // --- 2. LECTURA Y VALIDACIÓN ---
 
-/**
- * Valida un token de invitación antes de que el usuario la acepte.
- */
 router.get('/invitations/validate/:token', async (req, res) => {
     const { token } = req.params;
     try {
@@ -35,18 +38,12 @@ router.get('/invitations/validate/:token', async (req, res) => {
         }
         res.json(rows[0]);
     } catch (err) {
-        console.error("❌ Error al validar token:", err.message);
         res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-/**
- * Obtiene directorio de la clínica (miembros + invitaciones)
- */
 router.get('/:clinicId/members-and-invitations', async (req, res) => {
     const { clinicId } = req.params;
-    if (!req.pool) return res.status(500).json({ error: "Error de configuración de DB" });
-
     try {
         const membersQuery = `
             SELECT m.id, m.name, u.email, r.name as role_name, m.user_id,
@@ -76,18 +73,16 @@ router.get('/:clinicId/members-and-invitations', async (req, res) => {
 
         res.json({ members: membersRes.rows, invitations: invitationsRes.rows });
     } catch (err) {
-        console.error("❌ Error en directorio:", err.message);
         res.status(500).json({ error: "No se pudo obtener el directorio" });
     }
 });
 
-// --- 3. GESTIÓN DE INVITACIONES (ENVÍO REAL CON RESEND) ---
+// --- 3. GESTIÓN DE INVITACIONES (CORREGIDO SIN RESEND) ---
 
 router.post('/:clinicId/invitations', async (req, res) => {
     const { clinicId } = req.params;
     const { email, role_id, invited_by } = req.body;
 
-    // Generación de token único
     const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
 
     try {
@@ -98,7 +93,7 @@ router.post('/:clinicId/invitations', async (req, res) => {
         `;
         const { rows } = await req.pool.query(query, [clinicId, email, role_id, token, invited_by]);
 
-        // 2. Obtener nombres para personalizar el correo
+        // 2. Obtener datos para personalizar
         const clinicRes = await req.pool.query('SELECT name FROM clinics WHERE id = $1', [clinicId]);
         const senderRes = await req.pool.query('SELECT name FROM users WHERE id = $1', [invited_by]);
 
@@ -106,32 +101,28 @@ router.post('/:clinicId/invitations', async (req, res) => {
         const senderName = senderRes.rows[0]?.name || "Un colega";
         const inviteLink = `${process.env.FRONTEND_URL}/register?token=${token}`;
 
-        // 3. Renderizar el correo a HTML
+        // 3. Renderizar el correo (React Email)
         const emailHtml = await render(
-            <InviteEmail
-                clinicName={clinicName}
-                senderName={senderName}
-                inviteLink={inviteLink}
-            />
+            React.createElement(InviteEmail, {
+                clinicName,
+                senderName,
+                inviteLink
+            })
         );
 
-        // 4. Envío Real a través de Resend
-        const { data, error } = await resend.emails.send({
-            from: 'Adaptia <onboarding@resend.dev>',
-            to: [email],
+        // 4. Envío con NODEMAILER
+        const mailOptions = {
+            from: `"Adaptia" <${process.env.EMAIL_USER}>`,
+            to: email,
             subject: `${senderName} te ha invitado a unirte a ${clinicName}`,
             html: emailHtml,
-        });
+        };
 
-        if (error) {
-            console.error("❌ Error de Resend:", error);
-            return res.status(400).json({ error: "La invitación se guardó pero el correo falló." });
-        }
+        await transporter.sendMail(mailOptions);
 
         res.status(201).json({
             success: true,
-            invitation: rows[0],
-            emailId: data.id
+            invitation: rows[0]
         });
 
     } catch (err) {
@@ -173,7 +164,6 @@ router.post('/accept-invitation', async (req, res) => {
         res.json({ success: true, member: memberRes.rows[0] });
     } catch (err) {
         await req.pool.query('ROLLBACK');
-        console.error("❌ Error al aceptar invitación:", err.message);
         res.status(400).json({ error: err.message });
     }
 });
