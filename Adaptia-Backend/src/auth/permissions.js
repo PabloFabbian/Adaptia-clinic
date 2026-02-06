@@ -1,16 +1,11 @@
 export const CAPABILITIES = {
     READ_APPOINTMENTS: 'clinic.appointments.read',
     READ_PATIENTS: 'clinic.patients.read',
-    READ_NOTES: 'clinic.notes.read',
-    READ_MEMBERS: 'clinic.members.read',
-    READ_ROLES: 'clinic.roles.read',
-    WRITE_APPOINTMENTS: 'clinic.appointments.write',
-    WRITE_MEMBERS: 'clinic.members.write',
-    WRITE_SETTINGS: 'clinic.settings.write',
-    MANAGE_CLINIC: 'clinic.settings.read'
+    READ_NOTES: 'clinic.notes.read'
 };
 
-export const getResourceFilter = async (pool, viewerMemberId, clinicId, resourceType) => {
+export const getResourceFilter = async (pool, viewerUserId, clinicId, resourceType) => {
+    // Mapeo de recurso a la capacidad necesaria
     const resourceToCapability = {
         'appointments': CAPABILITIES.READ_APPOINTMENTS,
         'patients': CAPABILITIES.READ_PATIENTS,
@@ -20,34 +15,36 @@ export const getResourceFilter = async (pool, viewerMemberId, clinicId, resource
     const capabilityNeeded = resourceToCapability[resourceType];
 
     try {
+        // Buscamos si el usuario tiene la capacidad asignada a través de su rol
         const capsRes = await pool.query(`
             SELECT c.slug FROM members m
             JOIN role_capabilities rc ON m.role_id = rc.role_id
             JOIN capabilities c ON rc.capability_id = c.id
-            WHERE m.id = $1 AND m.clinic_id = $2`,
-            [viewerMemberId, clinicId]
+            WHERE m.user_id = $1 AND m.clinic_id = $2`,
+            [viewerUserId, clinicId]
         );
 
-        const capabilities = capsRes.rows.map(r => r.slug);
-        const canViewGlobal = capabilities.includes(capabilityNeeded);
+        const userCapabilities = capsRes.rows.map(r => r.slug);
 
-        if (canViewGlobal) {
-            return {
-                query: `(a.owner_member_id = $2 OR a.owner_member_id IN (
-                    SELECT member_id FROM consents 
-                    WHERE resource_type = $3 AND is_granted = TRUE AND clinic_id = $4
-                ))`,
-                params: [viewerMemberId, resourceType, clinicId]
-            };
+        // Si tiene la capacidad global, devolvemos un filtro que permita ver todo
+        if (userCapabilities.includes(capabilityNeeded)) {
+            return { query: `(TRUE)`, params: [] };
         }
 
+        // Si no tiene capacidad global, filtramos para que solo vea lo que él creó
+        const memberRes = await pool.query(
+            'SELECT id FROM members WHERE user_id = $1 AND clinic_id = $2',
+            [viewerUserId, clinicId]
+        );
+        const memberId = memberRes.rows[0]?.id;
+
         return {
-            query: `a.owner_member_id = $2`,
-            params: [viewerMemberId]
+            query: `owner_member_id = $1`,
+            params: [memberId || 0]
         };
 
     } catch (error) {
         console.error("❌ Error en getResourceFilter:", error);
-        return { query: `a.owner_member_id = $2`, params: [viewerMemberId] };
+        return { query: `owner_member_id = $1`, params: [0] };
     }
 };

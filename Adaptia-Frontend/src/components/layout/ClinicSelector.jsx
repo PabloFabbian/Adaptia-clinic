@@ -1,13 +1,29 @@
 import { useAuth } from '../../context/AuthContext';
 import { ChevronsDownUp, Building2, Check, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 export const ClinicSelector = () => {
     const { user, activeClinic, switchClinic } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
 
-    // Si el usuario no tiene membresías o no hay clínica activa, no mostramos el selector
-    if (!user?.memberships || user.memberships.length === 0) return null;
+    // Normalizamos las membresías para que el componente siempre lea 'list'
+    // independientemente de si la DB devuelve .members o .memberships
+    const membershipList = useMemo(() => {
+        return user?.members || user?.memberships || [];
+    }, [user]);
+
+    // EFECTO CRÍTICO: Si hay usuario pero no hay clínica activa,
+    // seleccionamos la primera automáticamente usando la lista normalizada.
+    useEffect(() => {
+        if (membershipList.length > 0 && !activeClinic) {
+            switchClinic(membershipList[0]);
+        }
+    }, [membershipList, activeClinic, switchClinic]);
+
+    if (membershipList.length === 0) return null;
+
+    // Normalizamos el ID para la comparación visual
+    const currentClinicId = String(activeClinic?.id || activeClinic?.clinic_id || "");
 
     return (
         <div className="relative px-4 mb-6">
@@ -25,14 +41,16 @@ export const ClinicSelector = () => {
                     </div>
                     <div className="text-left truncate">
                         <p className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate leading-none">
-                            {activeClinic?.clinic_name || 'Seleccionar Sede'}
+                            {activeClinic?.name || activeClinic?.clinic_name || 'Seleccionar Sede'}
                         </p>
                         <p className="text-[10px] text-gray-400 mt-1 uppercase tracking-tighter">
                             {activeClinic?.role_name || 'Sin rol'}
                         </p>
                     </div>
                 </div>
-                <ChevronsDownUp size={14} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+                <div className="pointer-events-none">
+                    <ChevronsDownUp size={14} className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors" />
+                </div>
             </button>
 
             {/* Dropdown de Sedes */}
@@ -40,26 +58,31 @@ export const ClinicSelector = () => {
                 <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
                     <div className="absolute left-4 right-4 mt-2 bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-2xl shadow-2xl z-20 py-2 animate-in slide-in-from-top-2 duration-200">
-                        {user.memberships.map((membership) => (
-                            <button
-                                key={membership.clinic_id}
-                                onClick={() => {
-                                    switchClinic(membership);
-                                    setIsOpen(false);
-                                }}
-                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                            >
-                                <div className="flex flex-col text-left">
-                                    <span className={`text-xs ${activeClinic?.clinic_id === membership.clinic_id ? 'text-adaptia-blue font-semibold' : 'text-gray-600 dark:text-gray-300'}`}>
-                                        {membership.clinic_name}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 uppercase">{membership.role_name}</span>
-                                </div>
-                                {activeClinic?.clinic_id === membership.clinic_id && (
-                                    <Check size={14} className="text-adaptia-blue" />
-                                )}
-                            </button>
-                        ))}
+                        {membershipList.map((membership) => {
+                            const mId = String(membership.clinic_id || membership.id);
+                            const isActive = currentClinicId === mId;
+
+                            return (
+                                <button
+                                    key={mId}
+                                    onClick={() => {
+                                        switchClinic(membership);
+                                        setIsOpen(false);
+                                    }}
+                                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                                >
+                                    <div className="flex flex-col text-left">
+                                        <span className={`text-xs ${isActive ? 'text-adaptia-blue font-semibold' : 'text-gray-600 dark:text-gray-300'}`}>
+                                            {membership.clinic_name || membership.name}
+                                        </span>
+                                        <span className="text-[9px] text-gray-400 uppercase">{membership.role_name}</span>
+                                    </div>
+                                    {isActive && (
+                                        <Check size={14} className="text-adaptia-blue" />
+                                    )}
+                                </button>
+                            );
+                        })}
 
                         <div className="h-px bg-gray-100 dark:bg-dark-border my-2 mx-4"></div>
 

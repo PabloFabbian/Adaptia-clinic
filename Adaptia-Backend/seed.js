@@ -1,10 +1,10 @@
-import pkg from 'pg';
-const { Pool } = pkg;
+import pg from 'pg';
+const { Pool } = pg;
 import { createDatabaseSchema } from './src/auth/models.js';
 import 'dotenv/config';
 
 if (!process.env.DATABASE_URL) {
-    console.error("❌ ERROR: No se encontró DATABASE_URL en el archivo .env");
+    console.error("❌ ERROR: No se encontró DATABASE_URL");
     process.exit(1);
 }
 
@@ -20,81 +20,98 @@ const seed = async () => {
         // 1. Asegurar esquema
         await pool.query(createDatabaseSchema);
 
-        // 2. Roles
-        const roles = ['Owner', 'Administrador', 'Especialista', 'Secretaría', 'tech'];
-        for (const roleName of roles) {
-            await pool.query("INSERT INTO roles (name) VALUES ($1) ON CONFLICT (name) DO NOTHING", [roleName]);
-        }
-
-        // 3. Capacidades
-        const caps = ['view_all_appointments', 'view_all_patients', 'view_all_clinical_notes', 'manage_clinic'];
-        for (const cap of caps) {
-            await pool.query("INSERT INTO capabilities (slug) VALUES ($1) ON CONFLICT (slug) DO NOTHING", [cap]);
-        }
-
-        // 4. Gestión de Clínica
-        const clinicCheck = await pool.query("SELECT id FROM clinics WHERE name = 'Melon Clinic España' LIMIT 1");
-        let clinicId = clinicCheck.rows.length > 0
-            ? clinicCheck.rows[0].id
-            : (await pool.query("INSERT INTO clinics (name) VALUES ('Melon Clinic España') RETURNING id")).rows[0].id;
-
-        // --- 5. GESTIÓN DE USUARIOS (Pablo y Luis) ---
-        const usersToCreate = [
-            { name: 'Pablo Fabbian', email: 'pablo.fabbian@adaptia.com', pass: 'Admin159', role: 'Owner' },
-            { name: 'Luis David', email: 'luis@adaptia.com', pass: '123', role: 'Administrador' }
+        // 2. Definición de Roles
+        const roles = [
+            { name: 'Tech Owner', desc: 'Control total del sistema' },
+            { name: 'Owner', desc: 'Acceso administrativo total a la clínica' },
+            { name: 'Administrador', desc: 'Gestión operativa' },
+            { name: 'Especialista', desc: 'Acceso clínico' },
+            { name: 'Secretaría', desc: 'Gestión de agenda y pacientes' }
         ];
 
-        for (const userData of usersToCreate) {
-            // Actualizar o insertar usuario
-            await pool.query(`
-                INSERT INTO users (name, email, password_hash) 
-                VALUES ($1, $2, $3) 
-                ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash`,
-                [userData.name, userData.email, userData.pass]
+        for (const r of roles) {
+            await pool.query(
+                "INSERT INTO roles (name, description) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description",
+                [r.name, r.desc]
             );
+        }
 
-            const roleRes = await pool.query("SELECT id FROM roles WHERE name = $1 LIMIT 1", [userData.role]);
-            const roleId = roleRes.rows[0].id;
+        // 3. Definición de Capacidades
+        const capabilities = [
+            { slug: 'clinic.appointments.read', name: 'Ver citas médicas' },
+            { slug: 'clinic.appointments.write', name: 'Crear y editar citas' },
+            { slug: 'clinic.patients.read', name: 'Ver lista de pacientes' },
+            { slug: 'clinic.patients.write', name: 'Registrar o editar pacientes' },
+            { slug: 'clinic.records.read', name: 'Ver expedientes clínicos' },
+            { slug: 'clinic.records.write', name: 'Editar expedientes clínicos' },
+            { slug: 'clinic.records.read.all', name: 'Ver todos los expedientes (toda la clínica)' },
+            { slug: 'clinic.notes.read', name: 'Leer notas de evolución' },
+            { slug: 'clinic.notes.write', name: 'Crear notas clínicas' },
+            { slug: 'clinic.members.read', name: 'Ver personal de la clínica' },
+            { slug: 'clinic.roles.read', name: 'Ver roles y permisos' },
+            { slug: 'clinic.settings.write', name: 'Configurar datos de la clínica' },
+            { slug: 'manage_clinic', name: 'Gestión total de clínica' }
+        ];
 
-            // Lógica Quirúrgica para Members: Evita el error de Duplicado de PKEY
-            const memberCheck = await pool.query("SELECT id FROM members WHERE name = $1 LIMIT 1", [userData.name]);
+        for (const cap of capabilities) {
+            await pool.query(`
+                INSERT INTO capabilities (slug, name) 
+                VALUES ($1, $2) 
+                ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name`,
+                [cap.slug, cap.name]
+            );
+        }
 
-            if (memberCheck.rows.length > 0) {
-                console.log(`🔄 Actualizando permisos para: ${userData.name}`);
+        // 4. Obtener Clínica
+        const clinicRes = await pool.query("INSERT INTO clinics (name) VALUES ('Melon Clinic España') ON CONFLICT DO NOTHING RETURNING id");
+        let clinicId = clinicRes.rows.length > 0 ? clinicRes.rows[0].id : (await pool.query("SELECT id FROM clinics LIMIT 1")).rows[0].id;
+
+        // 5. Asignar permisos a roles administrativos
+        const allCaps = await pool.query("SELECT id FROM capabilities");
+        const adminRoles = await pool.query("SELECT id FROM roles WHERE name IN ('Owner', 'Tech Owner')");
+
+        for (const role of adminRoles.rows) {
+            for (const cap of allCaps.rows) {
                 await pool.query(
-                    "UPDATE members SET role_id = $1, clinic_id = $2 WHERE name = $3",
-                    [roleId, clinicId, userData.name]
-                );
-            } else {
-                console.log(`🆕 Creando registro de miembro para: ${userData.name}`);
-                await pool.query(
-                    "INSERT INTO members (name, role_id, clinic_id) VALUES ($1, $2, $3)",
-                    [userData.name, roleId, clinicId]
+                    "INSERT INTO role_capabilities (role_id, capability_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                    [role.id, cap.id]
                 );
             }
         }
 
-        // 6. Resetear secuencias de IDs para evitar futuros errores de duplicados
-        await pool.query(`
-            SELECT setval(pg_get_serial_sequence('members', 'id'), coalesce(max(id), 1)) FROM members;
-            SELECT setval(pg_get_serial_sequence('users', 'id'), coalesce(max(id), 1)) FROM users;
-        `).catch(e => console.log("ℹ️ Secuencias actualizadas."));
+        // 6. Gestión de Usuarios y Vinculación con Members
+        const usersToCreate = [
+            { name: 'Pablo Fabbian', email: 'pablo.fabbian@adaptia.com', pass: 'Admin159', role: 'Tech Owner' },
+            { name: 'Luis David', email: 'luis@adaptia.com', pass: '123', role: 'Administrador' }
+        ];
 
-        console.log(`
-        ✅ SEED COMPLETADO CON ÉXITO
-        --------------------------------------------------
-        PLATFORM ADMIN (OWNER):
-        User: pablo.fabbian@adaptia.com
-        Pass: Admin159
+        for (const userData of usersToCreate) {
+            // Insertar o actualizar usuario
+            const userRes = await pool.query(`
+                INSERT INTO users (name, email, password_hash) 
+                VALUES ($1, $2, $3) 
+                ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+                RETURNING id`,
+                [userData.name, userData.email, userData.pass]
+            );
+            const userId = userRes.rows[0].id;
 
-        ADMINISTRADOR:
-        User: luis@adaptia.com
-        Pass: 123
-        --------------------------------------------------
-        `);
+            const roleRes = await pool.query("SELECT id FROM roles WHERE name = $1", [userData.role]);
+            const roleId = roleRes.rows[0].id;
+
+            // Insertar o actualizar miembro vinculado al usuario
+            await pool.query(`
+                INSERT INTO members (name, role_id, clinic_id, user_id) 
+                VALUES ($1, $2, $3, $4) 
+                ON CONFLICT (user_id) DO UPDATE SET role_id = EXCLUDED.role_id, name = EXCLUDED.name`,
+                [userData.name, roleId, clinicId, userId]
+            );
+        }
+
+        console.log("✅ SEED COMPLETADO: Sistema listo para login.");
 
     } catch (err) {
-        console.error("❌ Error crítico en el seed:", err.message);
+        console.error("❌ Error en el seed:", err);
     } finally {
         await pool.end();
     }

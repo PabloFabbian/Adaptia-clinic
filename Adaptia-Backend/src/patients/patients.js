@@ -2,20 +2,29 @@ import express from 'express';
 import { getResourceFilter } from '../auth/permissions.js';
 const router = express.Router();
 
-// 1. LISTAR PACIENTES
+// 1. LISTAR PACIENTES (Integrado con Gobernanza)
 router.get('/', async (req, res) => {
     try {
-        const viewerMemberId = 1;
-        const clinicId = 1;
+        const viewerMemberId = req.query.userId;
+        const clinicId = req.query.clinicId;
+
+        if (!viewerMemberId || !clinicId) {
+            return res.status(200).json({ data: [] });
+        }
+
         const filter = await getResourceFilter(req.pool, viewerMemberId, clinicId, 'patients');
 
+        // Modificamos la query para traer el nombre del dueño
         const query = `
-            SELECT id, name, email, phone, dni, address, birth_date, gender, 
-                   insurance_name, insurance_number, history, owner_member_id
-            FROM patients
-            WHERE ${filter.query}
-            ORDER BY name ASC
+            SELECT 
+                p.*, 
+                m.name as owner_name 
+            FROM patients p
+            LEFT JOIN members m ON p.owner_member_id = m.user_id
+            WHERE ${filter.query.replace(/owner_member_id/g, 'p.owner_member_id')}
+            ORDER BY p.name ASC
         `;
+
         const { rows } = await req.pool.query(query, filter.params);
         res.json({ data: rows });
     } catch (error) {
@@ -24,11 +33,10 @@ router.get('/', async (req, res) => {
     }
 });
 
-// 2. OBTENER UN PACIENTE POR ID (Corregido el error del pool)
+// 2. OBTENER UN PACIENTE POR ID
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        // CORRECCIÓN: Usamos req.pool para ser consistentes con el middleware
         const query = `SELECT * FROM patients WHERE id = $1`;
         const { rows } = await req.pool.query(query, [id]);
 
@@ -36,7 +44,6 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: "Paciente no encontrado" });
         }
 
-        // Aseguramos que history siempre sea un objeto para evitar errores en el front
         const patient = rows[0];
         if (!patient.history) patient.history = {};
 
@@ -65,7 +72,7 @@ router.post('/', async (req, res) => {
 
         const values = [
             name,
-            owner_member_id || 1,
+            owner_member_id,
             history || {},
             email || null,
             phone || null,
@@ -85,7 +92,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 4. ACTUALIZAR PERFIL (Guardado del Perfil Psicológico)
+// 4. ACTUALIZAR PERFIL
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const {
@@ -104,23 +111,17 @@ router.put('/:id', async (req, res) => {
 
         const values = [
             name, email, phone, dni, address,
-            birth_date || null,
-            gender || null,
-            insurance_name || null,
-            insurance_number || null,
-            history || {},
-            id
+            birth_date || null, gender || null,
+            insurance_name || null, insurance_number || null,
+            history || {}, id
         ];
 
         const { rows } = await req.pool.query(query, values);
-
-        if (rows.length === 0) {
-            return res.status(404).json({ error: "Paciente no encontrado" });
-        }
+        if (rows.length === 0) return res.status(404).json({ error: "No encontrado" });
 
         res.json({ success: true, data: rows[0] });
     } catch (error) {
-        console.error("❌ Error al actualizar perfil:", error);
+        console.error("❌ Error al actualizar:", error);
         res.status(500).json({ error: "Error al actualizar perfil" });
     }
 });
@@ -129,36 +130,24 @@ router.put('/:id', async (req, res) => {
 router.get('/:id/export-pdf', async (req, res) => {
     const { id } = req.params;
     try {
-        const patientQuery = `SELECT * FROM patients WHERE id = $1`;
-        // CORRECCIÓN: Asegúrate de que el nombre de la tabla sea clinical_notes o notes según tu DB
-        const notesQuery = `SELECT * FROM clinical_notes WHERE patient_id = $1 ORDER BY created_at DESC`;
+        const patientRes = await req.pool.query(`SELECT * FROM patients WHERE id = $1`, [id]);
+        const notesRes = await req.pool.query(`SELECT * FROM clinical_notes WHERE patient_id = $1 ORDER BY created_at DESC`, [id]);
 
-        const patientRes = await req.pool.query(patientQuery, [id]);
-        const notesRes = await req.pool.query(notesQuery, [id]);
+        if (patientRes.rows.length === 0) return res.status(404).json({ error: "No encontrado" });
 
-        if (patientRes.rows.length === 0) {
-            return res.status(404).json({ error: "Paciente no encontrado" });
-        }
-
-        res.json({
-            patient: patientRes.rows[0],
-            notes: notesRes.rows
-        });
+        res.json({ patient: patientRes.rows[0], notes: notesRes.rows });
     } catch (error) {
-        console.error("❌ Error en exportación:", error);
-        res.status(500).json({ error: "Error al generar datos de exportación" });
+        res.status(500).json({ error: "Error en exportación" });
     }
 });
 
-// 6. OBTENER NOTAS DEL PACIENTE (Extra para tu timeline)
+// 6. OBTENER NOTAS DEL PACIENTE
 router.get('/:id/notes', async (req, res) => {
     const { id } = req.params;
     try {
-        const query = `SELECT * FROM clinical_notes WHERE patient_id = $1 ORDER BY created_at DESC`;
-        const { rows } = await req.pool.query(query, [id]);
+        const { rows } = await req.pool.query(`SELECT * FROM clinical_notes WHERE patient_id = $1 ORDER BY created_at DESC`, [id]);
         res.json({ data: rows });
     } catch (error) {
-        console.error("❌ Error al obtener notas:", error);
         res.status(500).json({ error: "Error al obtener notas" });
     }
 });

@@ -1,20 +1,23 @@
+/**
+ * GET /api/clinics/roles
+ * Retorna el catálogo global de roles para la matriz de gobernanza
+ */
 export const getRoles = async (req, res) => {
     try {
-        // Consultamos solo lo que necesitamos para el modal
+        // Consultamos id y name (puedes agregar description si la necesitas luego)
         const query = 'SELECT id, name FROM roles ORDER BY id ASC';
+
+        // Usamos req.pool inyectado en index.js
         const { rows } = await req.pool.query(query);
 
-        if (!rows || rows.length === 0) {
-            console.warn("⚠️ La tabla roles está vacía.");
-            return res.json([]);
-        }
+        // Si no hay filas, devolvemos un array vacío pero con status 200
+        // Esto evita que el frontend lance un error al intentar iterar
+        res.json(rows || []);
 
-        res.json(rows);
     } catch (err) {
         console.error("❌ Error en getRoles:", err.message);
 
-        // Si hay un error de base de datos (como el que tuviste), 
-        // enviamos una respuesta controlada para que el frontend no rompa
+        // Respuesta controlada: el frontend recibirá un 500 y podrá manejar el error
         res.status(500).json({
             error: "Error al cargar niveles de gobernanza",
             message: err.message

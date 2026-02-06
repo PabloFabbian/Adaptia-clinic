@@ -9,6 +9,19 @@ export const createDatabaseSchema = `
     name TEXT NOT NULL UNIQUE
   );
 
+  -- TABLA NUEVA: Matriz de Gobernanza por Rol
+  -- Aquí se guarda qué puede hacer un 'doctor' o 'recepcionista' por defecto
+  CREATE TABLE IF NOT EXISTS role_permissions (
+    id SERIAL PRIMARY KEY,
+    clinic_id INTEGER REFERENCES clinics(id) ON DELETE CASCADE,
+    role_name TEXT NOT NULL,
+    resource TEXT NOT NULL, -- 'appointments', 'patients', 'clinical_notes'
+    can_view BOOLEAN DEFAULT false,
+    can_edit BOOLEAN DEFAULT false,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(clinic_id, role_name, resource)
+  );
+
   CREATE TABLE IF NOT EXISTS capabilities (
     id SERIAL PRIMARY KEY,
     slug TEXT NOT NULL UNIQUE,
@@ -25,7 +38,8 @@ export const createDatabaseSchema = `
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS members (
@@ -34,6 +48,18 @@ export const createDatabaseSchema = `
     name TEXT NOT NULL,
     role_id INTEGER REFERENCES roles(id),
     clinic_id INTEGER REFERENCES clinics(id) ON DELETE CASCADE
+  );
+
+  -- TABLA NUEVA: Invitaciones
+  -- Necesaria para el endpoint de envío de correos que tienes en index.js
+  CREATE TABLE IF NOT EXISTS invitations (
+    id SERIAL PRIMARY KEY,
+    clinic_id INTEGER REFERENCES clinics(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    role_id INTEGER REFERENCES roles(id),
+    invited_by INTEGER REFERENCES users(id),
+    status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'expired'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS patients (
