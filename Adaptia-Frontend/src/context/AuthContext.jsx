@@ -10,23 +10,35 @@ export const AuthProvider = ({ children }) => {
 
     const API_BASE_URL = 'http://localhost:3001';
 
-    // Obtener permisos desde la tabla role_capabilities de Neon
+    /**
+     * fetchMyPermissions:
+     * Obtiene permisos desde la tabla role_capabilities.
+     * Si el rol es 17 (Master), evitamos que el error 404 rompa la experiencia.
+     */
     const fetchMyPermissions = useCallback(async (roleId, clinicId) => {
         if (!roleId || !clinicId) return;
+
         try {
             const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}/roles/${roleId}/capabilities`);
+
+            // Si el backend devuelve 404, tratamos los permisos como vacíos sin lanzar excepción
+            if (response.status === 404) {
+                console.warn(`⚠️ No se encontraron capacidades definidas para el rol ${roleId}.`);
+                setUserPermissions([]);
+                return;
+            }
 
             if (!response.ok) throw new Error('Error al obtener capacidades');
 
             const capabilities = await response.json();
 
-            // Normalizamos los slugs (ej: "clinic.patients.read")
+            // Normalizamos los slugs de permisos
             const permissions = capabilities.map(c => c.slug || c.capability?.slug || c);
 
             setUserPermissions(permissions);
             localStorage.setItem('adaptia_permissions', JSON.stringify(permissions));
         } catch (error) {
-            console.error("❌ Error en AuthContext (fetchMyPermissions):", error);
+            console.error("❌ Error en AuthContext (fetchMyPermissions):", error.message);
             setUserPermissions([]);
         }
     }, []);
@@ -34,8 +46,6 @@ export const AuthProvider = ({ children }) => {
     const switchClinic = useCallback(async (membership) => {
         if (!membership) return;
 
-        // Normalización estricta de IDs. 
-        // Importante: role_name debe venir del JOIN con la tabla 'roles' en tu backend
         const clinicData = {
             id: String(membership.clinic_id || membership.id),
             name: membership.clinic_name || membership.name || "Clínica Adaptia",
@@ -46,22 +56,23 @@ export const AuthProvider = ({ children }) => {
         setActiveClinic(clinicData);
         localStorage.setItem('adaptia_active_clinic', JSON.stringify(clinicData));
 
+        // Para el Tech Owner (17), el Sidebar ya le da acceso total, 
+        // pero igual intentamos refrescar por si hay capacidades extra.
         if (clinicData.role_id && clinicData.id) {
             await fetchMyPermissions(clinicData.role_id, clinicData.id);
         }
     }, [fetchMyPermissions]);
 
     const login = async (userData) => {
-        // 1. Detectamos si la clínica viene "aplanada" como en tu objeto
         let initialMemberships = userData.memberships || [];
 
-        // 2. Si memberships está vacío pero tienes activeClinic, lo convertimos en una membresía válida
+        // Inyección de membresía para el Tech Owner si viene aplanado
         if (initialMemberships.length === 0 && userData.activeClinic) {
             initialMemberships = [{
                 clinic_id: userData.activeClinic.id,
                 clinic_name: userData.activeClinic.name,
                 role_name: userData.activeClinic.role_name || userData.role,
-                role_id: "17" // Forzamos tu ID de Tech Owner ya que sabemos que es el 17
+                role_id: "17"
             }];
         }
 
@@ -73,9 +84,7 @@ export const AuthProvider = ({ children }) => {
         setUser(normalizedUser);
         localStorage.setItem('adaptia_user', JSON.stringify(normalizedUser));
 
-        // 3. Ahora primaryMembership ya no será nulo
         const primaryMembership = normalizedUser.memberships[0];
-
         if (primaryMembership) {
             await switchClinic(primaryMembership);
         }
@@ -96,10 +105,11 @@ export const AuthProvider = ({ children }) => {
                         const clinic = JSON.parse(savedClinic);
                         setActiveClinic(clinic);
 
+                        // Si tenemos permisos guardados, los cargamos para rapidez visual
                         if (savedPerms) setUserPermissions(JSON.parse(savedPerms));
 
-                        // Refrescamos permisos para asegurar que el Tech Owner tenga todo al día
-                        await fetchMyPermissions(clinic.role_id, clinic.id);
+                        // Refrescamos en segundo plano
+                        fetchMyPermissions(clinic.role_id, clinic.id);
                     }
                 }
             } catch (error) {
@@ -118,15 +128,10 @@ export const AuthProvider = ({ children }) => {
         localStorage.clear();
     };
 
-    /**
-     * hasRole: Lógica de validación flexible.
-     * Si eres Pablo (ID 17), esta función validará correctamente contra el Sidebar.
-     */
     const hasRole = (roleIdentifiers) => {
         if (!activeClinic) return false;
 
         const identifiers = Array.isArray(roleIdentifiers) ? roleIdentifiers : [roleIdentifiers];
-
         const currentRoleName = activeClinic.role_name?.toLowerCase().trim();
         const currentRoleId = String(activeClinic.role_id || "").trim();
 

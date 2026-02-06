@@ -26,10 +26,7 @@ export const ClinicSelector = () => {
     const currentClinicId = String(activeClinic?.id || activeClinic?.clinic_id || "");
 
     return (
-        <div className="relative px-4 mb-6">
-            <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em] mb-2 block ml-1">
-                Sede Activa
-            </label>
+        <div className="relative px-1 mb-6">
 
             <button
                 onClick={() => setIsOpen(!isOpen)}
@@ -57,7 +54,7 @@ export const ClinicSelector = () => {
             {isOpen && (
                 <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-                    <div className="absolute left-4 right-4 mt-2 bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-2xl shadow-2xl z-20 py-2 animate-in slide-in-from-top-2 duration-200">
+                    <div className="absolute left-1 right-1 mt-2 bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-2xl shadow-2xl z-20 py-2 animate-in slide-in-from-top-2 duration-200">
                         {membershipList.map((membership) => {
                             const mId = String(membership.clinic_id || membership.id);
                             const isActive = currentClinicId === mId;

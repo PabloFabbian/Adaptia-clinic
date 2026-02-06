@@ -49,7 +49,6 @@ export const getClinicDirectory = async (req, res) => {
 
 /** 2. Obtener Matriz de Gobernanza (Permisos por Rol) */
 export const getGovernance = async (req, res) => {
-    // Aunque la matriz sea global, el router espera este parámetro
     const { clinicId } = req.params;
     try {
         const query = `
@@ -114,17 +113,15 @@ export const createInvitation = async (req, res) => {
 /** 4. Catálogo de Capacidades (Sincronizado con Neon) */
 export const getAllCapabilities = async (req, res) => {
     try {
-        // Consultamos solo las columnas que Neon confirmó que existen
-        const { rows } = await req.pool.query(`SELECT id, slug FROM capabilities ORDER BY slug ASC`);
+        // Corregido: Usamos pool directamente en lugar de req.pool
+        const { rows } = await pool.query(`SELECT id, slug FROM capabilities ORDER BY slug ASC`);
 
-        // Transformamos el slug para que el usuario vea algo legible
-        // Ejemplo: 'clinic.patients.read' -> 'patients read'
         const capabilitiesWithNames = rows.map(cap => ({
             ...cap,
             name: cap.slug
-                .replace('clinic.', '') // Quita el prefijo
-                .replace(/\./g, ' ')    // Cambia puntos por espacios
-                .toUpperCase()          // Lo pone en mayúsculas para que resalte
+                .replace('clinic.', '')
+                .replace(/\./g, ' ')
+                .toUpperCase()
         }));
 
         res.json(capabilitiesWithNames);
@@ -171,5 +168,25 @@ export const toggleMemberConsent = async (req, res) => {
     } catch (error) {
         console.error('❌ Error en toggleMemberConsent:', error);
         res.status(500).json({ error: 'Error al actualizar soberanía' });
+    }
+};
+
+/** 7. Obtener Capacidades específicas de un Rol (Para el AuthContext) */
+export const getCapabilitiesByRole = async (req, res) => {
+    const { roleId } = req.params;
+    try {
+        const query = `
+            SELECT c.slug 
+            FROM role_capabilities rc
+            JOIN capabilities c ON rc.capability_id = c.id
+            WHERE rc.role_id = $1
+        `;
+        const { rows } = await pool.query(query, [roleId]);
+
+        const slugs = rows.map(row => row.slug);
+        res.json(slugs);
+    } catch (error) {
+        console.error('❌ Error en getCapabilitiesByRole:', error);
+        res.status(500).json({ error: 'Error al obtener capacidades del rol' });
     }
 };
