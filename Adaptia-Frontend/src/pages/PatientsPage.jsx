@@ -13,6 +13,7 @@ import { ClinicalNoteModal } from '../features/patients/ClinicalNoteModal';
 
 export const PatientsPage = () => {
     const navigate = useNavigate();
+    // Extraemos activeClinic y user del contexto de Auth
     const { user, activeClinic, loading: authLoading } = useAuth();
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -33,11 +34,12 @@ export const PatientsPage = () => {
 
     const handleSaveNote = async (formData) => {
         try {
-            if (!selectedPatient) {
-                toast.error("Error", { description: "No hay paciente seleccionado" });
+            if (!selectedPatient || !user?.id) {
+                toast.error("Error", { description: "Faltan datos de sesión o paciente" });
                 return;
             }
 
+            // Usamos la URL con el token para el POST de la nota
             const response = await fetch('http://localhost:3001/api/clinical-notes', {
                 method: 'POST',
                 headers: {
@@ -46,7 +48,7 @@ export const PatientsPage = () => {
                 },
                 body: JSON.stringify({
                     patient_id: selectedPatient.id,
-                    member_id: user?.id,
+                    member_id: user.id, // ID del profesional logueado
                     content: formData.details,
                     title: formData.title,
                     summary: formData.summary,
@@ -54,12 +56,13 @@ export const PatientsPage = () => {
                 })
             });
 
-            if (!response.ok) throw new Error("Error al guardar");
+            if (!response.ok) throw new Error("Error al guardar la nota");
 
-            toast.success("Nota guardada");
+            toast.success("Nota clínica guardada exitosamente");
             setIsNoteModalOpen(false);
             refresh();
-            // Mantenemos el panel abierto refrescando los datos
+
+            // Refrescamos el paciente seleccionado para ver la nueva nota en el panel
             setSelectedPatient({ ...selectedPatient });
 
         } catch (err) {
@@ -199,8 +202,11 @@ export const PatientsPage = () => {
                 </div>
             </div>
 
+            {/* AQUÍ ESTÁ EL CAMBIO CLAVE: Pasamos user y activeClinic al panel */}
             <PatientDetailsPanel
                 patient={selectedPatient}
+                user={user}
+                activeClinic={activeClinic}
                 onClose={closePanel}
                 onOpenNote={() => setIsNoteModalOpen(true)}
             />

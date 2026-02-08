@@ -15,10 +15,15 @@ export const Layout = () => {
     // --- LÓGICA DINÁMICA DE ROL ---
     // Buscamos el rol del usuario en la clínica activa o el rol global
     const userRoleDisplay = useMemo(() => {
-        if (!user) return 'Invitado';
+        if (!user || activeClinic === null) return 'Sin Clínica'; // Cambio clave
 
-        // Si tienes la información del rol dentro del objeto user o activeClinic:
-        return user.role_name || activeClinic?.role_name || 'Profesional';
+        const rid = Number(activeClinic.role_id);
+
+        if (rid === 0) return 'Tech Owner';
+        if (rid <= 2) return 'Owner';
+        if (rid <= 4) return 'Psicólogo';
+        if (rid <= 6) return 'Secretaria';
+        return 'Invitado';
     }, [user, activeClinic]);
 
     const toggleTheme = () => {

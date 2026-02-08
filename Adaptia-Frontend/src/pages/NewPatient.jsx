@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 export const NewPatient = () => {
     const { id } = useParams();
     const isEditMode = Boolean(id);
-
     const navigate = useNavigate();
     const { user } = useAuth();
     const errorRef = useRef(null);
@@ -27,7 +26,6 @@ export const NewPatient = () => {
         gender: '',
         insurance_name: '',
         insurance_number: '',
-        // --- EL CAJÓN DE SASTRE (HISTORY) ---
         history: {
             motivo_consulta: '',
             antecedentes: '',
@@ -35,6 +33,7 @@ export const NewPatient = () => {
         }
     });
 
+    // Carga de datos inicial en modo edición
     useEffect(() => {
         if (isEditMode) {
             const fetchPatient = async () => {
@@ -54,7 +53,6 @@ export const NewPatient = () => {
                             insurance_name: p.insurance_name || '',
                             insurance_number: p.insurance_number || '',
                             birth_date: p.birth_date ? p.birth_date.split('T')[0] : '',
-                            // Cargamos history si existe, si no, el estado inicial
                             history: p.history && typeof p.history === 'object' ? p.history : {
                                 motivo_consulta: '',
                                 antecedentes: '',
@@ -83,7 +81,6 @@ export const NewPatient = () => {
         setError('');
         setDuplicatePatient(null);
 
-        // Lógica para manejar campos anidados en 'history'
         if (name.startsWith('history.')) {
             const field = name.split('.')[1];
             setFormData(prev => ({
@@ -101,10 +98,11 @@ export const NewPatient = () => {
         setError('');
 
         try {
+            // 1. Verificación de Duplicados (Solo en creación)
             if (!isEditMode) {
                 const checkRes = await fetch('http://localhost:3001/api/patients');
                 const { data } = await checkRes.json();
-                const existing = data.find(p => (p.dni === formData.dni && formData.dni !== ''));
+                const existing = data.find(p => p.dni === formData.dni && formData.dni !== '');
 
                 if (existing) {
                     setError(`El paciente "${existing.name}" ya está registrado con ese DNI.`);
@@ -115,23 +113,26 @@ export const NewPatient = () => {
                 }
             }
 
+            // 2. Preparación de URL y Método
             const url = isEditMode
                 ? `http://localhost:3001/api/patients/${id}`
                 : 'http://localhost:3001/api/patients';
-
             const method = isEditMode ? 'PUT' : 'POST';
 
+            // 3. Envío de Datos
             const response = await fetch(url, {
                 method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...formData,
+                    // Si el backend espera un string para el campo JSON history, descomenta la siguiente línea:
+                    // history: JSON.stringify(formData.history),
                     owner_member_id: user?.id || 1
                 })
             });
 
             if (response.ok) {
-                toast.success(isEditMode ? "Paciente actualizado" : "Paciente registrado");
+                toast.success(isEditMode ? "Paciente actualizado correctamente" : "Paciente registrado con éxito");
                 navigate('/pacientes');
             } else {
                 const errorData = await response.json();
@@ -153,13 +154,14 @@ export const NewPatient = () => {
     `;
 
     if (fetching) return (
-        <div className="h-96 flex items-center justify-center text-gray-400 italic animate-pulse uppercase text-xs tracking-widest">
+        <div className="h-screen flex items-center justify-center text-gray-400 italic animate-pulse uppercase text-xs tracking-widest">
             Cargando expediente...
         </div>
     );
 
     return (
         <div className="max-w-4xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* Botón Volver */}
             <Link to="/pacientes" className="flex items-center gap-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 mb-8 text-sm transition-colors group">
                 <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
                 <span className="font-light tracking-wide">Volver a la base de datos</span>
@@ -167,7 +169,7 @@ export const NewPatient = () => {
 
             <header className="mb-10">
                 <div className="flex items-center gap-5 mb-2">
-                    <div className={`p-4 rounded-[1.5rem] text-white shadow-2xl transition-colors ${isEditMode ? 'bg-adaptia-blue shadow-adaptia-blue/20' : 'bg-orange-500 shadow-orange-500/20'}`}>
+                    <div className={`p-4 rounded-[1.5rem] text-white shadow-2xl transition-colors ${isEditMode ? 'bg-blue-600 shadow-blue-500/20' : 'bg-orange-500 shadow-orange-500/20'}`}>
                         {isEditMode ? <Edit3 className="w-7 h-7" strokeWidth={1.5} /> : <UserPlus className="w-7 h-7" strokeWidth={1.5} />}
                     </div>
                     <div>
@@ -180,6 +182,7 @@ export const NewPatient = () => {
                     </div>
                 </div>
 
+                {/* Banner de Error */}
                 <div ref={errorRef}>
                     {error && (
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-[2rem] mt-8 animate-in zoom-in-95 duration-300 backdrop-blur-md">
@@ -345,7 +348,7 @@ export const NewPatient = () => {
                     </div>
                 </div>
 
-                {/* SECCIÓN 4: PERFIL PSICOLÓGICO (ESTO VA A LA COLUMNA HISTORY) */}
+                {/* SECCIÓN 4: PERFIL PSICOLÓGICO */}
                 <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] p-10 shadow-sm">
                     <h2 className="text-sm font-bold mb-8 flex items-center gap-3 text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">
                         <span className="w-9 h-9 bg-teal-500/10 text-teal-500 rounded-md flex items-center justify-center text-xs">04</span>
@@ -392,6 +395,7 @@ export const NewPatient = () => {
                     </div>
                 </div>
 
+                {/* Acciones Finales */}
                 <div className="flex items-center justify-end gap-6 pt-6 pb-20">
                     <button
                         type="button"
@@ -402,7 +406,7 @@ export const NewPatient = () => {
                     </button>
                     <button
                         disabled={loading}
-                        className={`px-12 py-4 text-white rounded-2xl font-bold flex items-center gap-3 hover:opacity-90 transition-all disabled:opacity-50 shadow-xl active:scale-95 text-sm uppercase tracking-widest ${isEditMode ? 'bg-adaptia-blue shadow-adaptia-blue/20' : 'bg-gray-900 shadow-gray-900/20'}`}
+                        className={`px-12 py-4 text-white rounded-2xl font-bold flex items-center gap-3 hover:opacity-90 transition-all disabled:opacity-50 shadow-xl active:scale-95 text-sm uppercase tracking-widest ${isEditMode ? 'bg-blue-600 shadow-blue-500/20' : 'bg-gray-900 shadow-gray-900/20'}`}
                     >
                         {loading ? 'Procesando...' : (
                             <>

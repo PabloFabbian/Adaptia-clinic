@@ -38,6 +38,7 @@ app.post('/api/auth/login', async (req, res) => {
         const query = `
             SELECT 
                 u.id, u.name, u.email, u.password_hash, 
+                m.role_id,           -- <--- AGREGADO: ID numérico vital para el Sidebar
                 r.name as role_name, 
                 m.clinic_id,
                 c.name as clinic_name
@@ -46,6 +47,8 @@ app.post('/api/auth/login', async (req, res) => {
             LEFT JOIN roles r ON m.role_id = r.id
             LEFT JOIN clinics c ON m.clinic_id = c.id
             WHERE u.email = $1
+            ORDER BY m.role_id ASC -- <--- TRUCO: Trae el rol con más poder primero (0 es menor que 6)
+            LIMIT 1; 
         `;
         const { rows } = await pool.query(query, [email]);
 
@@ -56,11 +59,11 @@ app.post('/api/auth/login', async (req, res) => {
                     id: user.id,
                     name: user.name,
                     email: user.email,
-                    role: user.role_name || 'Especialista',
-                    // Enviamos el objeto completo para que el AuthContext lo capture
+                    // Enviamos los datos para que el AuthContext los reconozca
                     activeClinic: user.clinic_id ? {
                         id: user.clinic_id,
                         name: user.clinic_name,
+                        role_id: user.role_id,   // <--- AHORA SÍ LLEGA AL FRONT
                         role_name: user.role_name
                     } : null
                 }

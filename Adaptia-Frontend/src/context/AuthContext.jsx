@@ -10,20 +10,14 @@ export const AuthProvider = ({ children }) => {
 
     const API_BASE_URL = 'http://localhost:3001';
 
-    /**
-     * fetchMyPermissions:
-     * Obtiene permisos desde la tabla role_capabilities.
-     * Si el rol es 17 (Master), evitamos que el error 404 rompa la experiencia.
-     */
+    // 1. Obtener permisos desde el backend
     const fetchMyPermissions = useCallback(async (roleId, clinicId) => {
-        if (!roleId || !clinicId) return;
+        if (roleId === undefined || roleId === null || !clinicId) return;
 
         try {
             const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}/roles/${roleId}/capabilities`);
 
-            // Si el backend devuelve 404, tratamos los permisos como vacíos sin lanzar excepción
             if (response.status === 404) {
-                console.warn(`⚠️ No se encontraron capacidades definidas para el rol ${roleId}.`);
                 setUserPermissions([]);
                 return;
             }
@@ -31,8 +25,6 @@ export const AuthProvider = ({ children }) => {
             if (!response.ok) throw new Error('Error al obtener capacidades');
 
             const capabilities = await response.json();
-
-            // Normalizamos los slugs de permisos
             const permissions = capabilities.map(c => c.slug || c.capability?.slug || c);
 
             setUserPermissions(permissions);
@@ -43,53 +35,63 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
+    // 2. Cambiar de clínica y forzar el role_id
     const switchClinic = useCallback(async (membership) => {
         if (!membership) return;
 
         const clinicData = {
             id: String(membership.clinic_id || membership.id),
-            name: membership.clinic_name || membership.name || "Clínica Adaptia",
-            role_id: String(membership.role_id || ""),
-            role_name: membership.role_name || membership.role?.name || "Member"
+            name: membership.clinic_name || membership.name || "Clínica",
+            // Forzamos Number para que el Sidebar pueda comparar (0 === 0)
+            role_id: Number(membership.role_id),
+            role_name: membership.role_name || (Number(membership.role_id) === 0 ? "Tech Owner" : "Miembro")
         };
 
         setActiveClinic(clinicData);
         localStorage.setItem('adaptia_active_clinic', JSON.stringify(clinicData));
 
-        // Para el Tech Owner (17), el Sidebar ya le da acceso total, 
-        // pero igual intentamos refrescar por si hay capacidades extra.
-        if (clinicData.role_id && clinicData.id) {
-            await fetchMyPermissions(clinicData.role_id, clinicData.id);
-        }
+        // Pedir permisos al backend
+        await fetchMyPermissions(clinicData.role_id, clinicData.id);
     }, [fetchMyPermissions]);
 
+    // 3. Login (Usa la lógica que te funciona pero normalizando el Role 0)
     const login = async (userData) => {
-        let initialMemberships = userData.memberships || [];
+        try {
+            const clinicRole = userData.activeClinic?.role_id;
+            const numericRoleId = (clinicRole !== undefined && clinicRole !== null)
+                ? Number(clinicRole)
+                : null;
 
-        // Inyección de membresía para el Tech Owner si viene aplanado
-        if (initialMemberships.length === 0 && userData.activeClinic) {
-            initialMemberships = [{
-                clinic_id: userData.activeClinic.id,
-                clinic_name: userData.activeClinic.name,
-                role_name: userData.activeClinic.role_name || userData.role,
-                role_id: "17"
-            }];
-        }
+            // Si el backend no manda 'memberships', creamos una basada en la activeClinic
+            const memberships = userData.memberships || (userData.activeClinic ? [userData.activeClinic] : []);
 
-        const normalizedUser = {
-            ...userData,
-            memberships: initialMemberships
-        };
+            const normalizedUser = {
+                ...userData,
+                role_id: numericRoleId,
+                memberships: memberships // Nos aseguramos de que esto exista
+            };
 
-        setUser(normalizedUser);
-        localStorage.setItem('adaptia_user', JSON.stringify(normalizedUser));
+            setUser(normalizedUser);
+            localStorage.setItem('adaptia_user', JSON.stringify(normalizedUser));
 
-        const primaryMembership = normalizedUser.memberships[0];
-        if (primaryMembership) {
-            await switchClinic(primaryMembership);
+            if (userData.activeClinic) {
+                const clinicData = {
+                    ...userData.activeClinic,
+                    role_id: numericRoleId
+                };
+                setActiveClinic(clinicData);
+                localStorage.setItem('adaptia_active_clinic', JSON.stringify(clinicData));
+                await fetchMyPermissions(clinicData.role_id, clinicData.id);
+            }
+
+            return normalizedUser;
+        } catch (error) {
+            console.error("❌ Error en AuthContext Login:", error);
+            throw error;
         }
     };
 
+    // 4. Inicialización (Persistencia al recargar F5)
     useEffect(() => {
         const initAuth = async () => {
             try {
@@ -97,18 +99,17 @@ export const AuthProvider = ({ children }) => {
                 const savedClinic = localStorage.getItem('adaptia_active_clinic');
                 const savedPerms = localStorage.getItem('adaptia_permissions');
 
-                if (savedUser) {
+                if (savedUser && savedUser !== "undefined") {
                     const parsedUser = JSON.parse(savedUser);
                     setUser(parsedUser);
 
                     if (savedClinic && savedClinic !== "undefined") {
                         const clinic = JSON.parse(savedClinic);
+                        clinic.role_id = Number(clinic.role_id);
                         setActiveClinic(clinic);
 
-                        // Si tenemos permisos guardados, los cargamos para rapidez visual
                         if (savedPerms) setUserPermissions(JSON.parse(savedPerms));
 
-                        // Refrescamos en segundo plano
                         fetchMyPermissions(clinic.role_id, clinic.id);
                     }
                 }
@@ -121,23 +122,26 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, [fetchMyPermissions]);
 
+    // 5. Logout
     const logout = () => {
         setUser(null);
         setActiveClinic(null);
         setUserPermissions([]);
         localStorage.clear();
+        window.location.href = '/login';
     };
 
+    // 6. Helper para verificar roles en el Sidebar y otros componentes
     const hasRole = (roleIdentifiers) => {
         if (!activeClinic) return false;
 
         const identifiers = Array.isArray(roleIdentifiers) ? roleIdentifiers : [roleIdentifiers];
+        const currentRoleId = Number(activeClinic.role_id);
         const currentRoleName = activeClinic.role_name?.toLowerCase().trim();
-        const currentRoleId = String(activeClinic.role_id || "").trim();
 
         return identifiers.some(id => {
-            const search = String(id).toLowerCase().trim();
-            return currentRoleName === search || currentRoleId === search;
+            if (typeof id === 'number') return currentRoleId === id;
+            return currentRoleName === String(id).toLowerCase().trim();
         });
     };
 

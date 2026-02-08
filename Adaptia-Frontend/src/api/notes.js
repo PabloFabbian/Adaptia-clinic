@@ -17,20 +17,15 @@ export const getPatientById = async (patientId) => {
     }
 };
 
-export const getPatientNotes = async (patientId) => {
-    try {
-        const response = await fetch(`${API_URL}/patients/${patientId}/notes`);
-        if (!response.ok) throw new Error('Error al obtener notas');
-        const result = await response.json();
+export const getPatientNotes = async (patientId, userId, clinicId) => {
+    // Si falta alguno, detenemos el disparo para evitar el 400
+    if (!patientId || !userId || !clinicId) return { data: [] };
 
-        // Tu backend devuelve { data: [notes] }
-        if (result && result.data && Array.isArray(result.data)) return result.data;
-        if (Array.isArray(result)) return result;
-        return [];
-    } catch (error) {
-        console.error("❌ Error en getPatientNotes:", error);
-        return [];
-    }
+    const url = `${import.meta.env.VITE_API_URL}/api/patients/${patientId}/notes?userId=${userId}&clinicId=${clinicId}`;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Error en aduana de API');
+    return await response.json();
 };
 
 export const updatePatient = async (patientId, patientData) => {
@@ -48,28 +43,21 @@ export const updatePatient = async (patientId, patientData) => {
     }
 };
 
-export const saveClinicalNote = async (patientId, noteData) => {
+export const saveClinicalNote = async (patientId, content, userId, clinicId) => {
     try {
-        const response = await fetch(`${API_URL}/clinical-notes`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/notes`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 patient_id: patientId,
-                member_id: noteData.member_id || 1,
-                title: noteData.title,
-                content: noteData.details || noteData.content,
-                category: noteData.category,
-                summary: noteData.summary
-            }),
+                content: content,
+                userId: userId,     // Enviamos estos para que el back 
+                clinicId: clinicId  // pueda validar quién escribe
+            })
         });
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Error al guardar la nota');
-        }
         return await response.json();
     } catch (error) {
-        console.error("❌ Error en saveClinicalNote:", error);
-        throw error;
+        console.error("Error al guardar nota:", error);
     }
 };
 
