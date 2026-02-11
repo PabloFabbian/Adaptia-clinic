@@ -31,22 +31,36 @@ export const PatientsPage = () => {
 
     // --- LÓGICA DE GOBERNANZA ---
 
-    // Verifica si el usuario actual tiene permiso para añadir notas clínicas
+    /**
+     * Determina si el usuario actual puede escribir notas o editar al paciente.
+     * Basado en permisos de rol y propiedad del registro.
+     */
     const canWriteNotes = (patient) => {
         if (!patient || !user) return false;
 
-        const hasRolePermission = ACTION_PERMISSIONS.WRITE_CLINICAL_NOTES.includes(user.role_id);
-
-        // El Tech Owner siempre puede. Otros deben tener el Rol médico Y ser dueños del registro
+        // 1. El Tech Owner siempre tiene acceso total
         if (user.role_id === ROLE.TECH_OWNER) return true;
 
+        // 2. Verificamos si su rol tiene permiso de escritura en las constantes
+        const hasRolePermission = ACTION_PERMISSIONS.WRITE_CLINICAL_NOTES.includes(user.role_id);
+
+        // 3. RESTRICCIÓN ESTRICTA: 
+        // Solo puede escribir si tiene el permiso de Rol Y es el dueño directo del paciente
         return hasRolePermission && patient.owner_member_id === user.id;
     };
 
-    // Determina qué nivel de acceso visual se muestra en la tabla
+    /**
+     * Define visualmente el nivel de acceso en la tabla
+     */
     const getAccessLevel = (patient) => {
         if (!patient || !user) return 'Read';
-        if (user.role_id === ROLE.TECH_OWNER || patient.owner_member_id === user.id) return 'Full';
+
+        // Solo Full Access si es Tech Owner o el dueño real del paciente
+        if (
+            user.role_id === ROLE.TECH_OWNER ||
+            patient.owner_member_id === user.id
+        ) return 'Full';
+
         return 'Read';
     };
 
@@ -58,7 +72,7 @@ export const PatientsPage = () => {
     const handleSaveNote = async (formData) => {
         if (!canWriteNotes(selectedPatient)) {
             toast.error("Acceso denegado", {
-                description: "Tu perfil no tiene permisos para redactar notas clínicas."
+                description: "No tienes permisos para redactar notas en este expediente."
             });
             return;
         }
@@ -84,8 +98,7 @@ export const PatientsPage = () => {
 
             toast.success("Nota clínica guardada exitosamente");
             setIsNoteModalOpen(false);
-            refresh();
-            setSelectedPatient({ ...selectedPatient });
+            refresh(); // Recargar datos para ver la nueva nota
 
         } catch (err) {
             toast.error("Error al guardar", { description: err.message });
@@ -108,6 +121,7 @@ export const PatientsPage = () => {
 
     return (
         <div className="relative min-h-screen">
+            {/* Main Content */}
             <div className={`max-w-7xl mx-auto px-6 py-10 transition-all duration-700 ease-in-out ${selectedPatient ? 'pr-[420px] scale-[0.97] blur-sm opacity-50 pointer-events-none' : 'scale-100 opacity-100'
                 }`}>
                 <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
@@ -125,7 +139,6 @@ export const PatientsPage = () => {
                         </div>
                     </div>
 
-                    {/* Botón de Nuevo Registro - Visible para todos los autorizados */}
                     {ACTION_PERMISSIONS.CREATE_PATIENT.includes(user?.role_id) && (
                         <button
                             onClick={() => navigate('/nuevo-paciente')}
@@ -153,7 +166,7 @@ export const PatientsPage = () => {
                     </button>
                 </div>
 
-                {/* Tabla de Pacientes */}
+                {/* Tabla */}
                 <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] shadow-2xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left min-w-[800px]">
@@ -229,9 +242,7 @@ export const PatientsPage = () => {
                                                                     patient.owner_name || 'Sin asignar'
                                                                 )}
                                                             </p>
-                                                            <p className="text-[9px] uppercase tracking-tighter text-gray-400 font-medium">
-                                                                Responsable
-                                                            </p>
+                                                            <p className="text-[9px] uppercase tracking-tighter text-gray-400 font-medium">Responsable</p>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -257,17 +268,17 @@ export const PatientsPage = () => {
                 </div>
             </div>
 
+            {/* Paneles laterales y Modales */}
             <PatientDetailsPanel
                 patient={selectedPatient}
                 user={user}
                 activeClinic={activeClinic}
                 onClose={closePanel}
-                // Si es Secretaria, canWriteNotes será false y no podrá abrir el modal de notas
                 onOpenNote={canWriteNotes(selectedPatient) ? () => setIsNoteModalOpen(true) : null}
                 canEdit={canWriteNotes(selectedPatient)}
             />
 
-            {isNoteModalOpen && canWriteNotes(selectedPatient) && (
+            {isNoteModalOpen && selectedPatient && (
                 <ClinicalNoteModal
                     isOpen={isNoteModalOpen}
                     patientName={selectedPatient?.name}

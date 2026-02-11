@@ -1,55 +1,47 @@
 import express from 'express';
-import { getResourceFilter } from '../auth/permissions.js';
 import pool from '../config/db.js';
+import { getResourceFilter } from '../auth/permissions.js';
 
 const router = express.Router();
 
-// 1. LISTAR PACIENTES (ARQUITECTURA DINÁMICA)
+/**
+ * 1. LISTAR PACIENTES (Arquitectura Dinámica)
+ */
 router.get('/', async (req, res) => {
     try {
         const { userId, clinicId } = req.query;
         if (!userId || !clinicId) return res.json({ data: [] });
 
-        // Identificamos al miembro y su rol
+        const uId = parseInt(userId, 10);
+        const cId = parseInt(clinicId, 10);
+
         const memberKey = await pool.query(
             `SELECT m.id, r.name as role_name FROM members m 
              JOIN roles r ON m.role_id = r.id 
              WHERE m.user_id = $1 AND m.clinic_id = $2`,
-            [userId, clinicId]
+            [uId, cId]
         );
 
         if (memberKey.rows.length === 0) return res.json({ data: [] });
 
-        const myMemberId = memberKey.rows[0].id;
         const myRoleName = memberKey.rows[0].role_name;
+        const isStaff = ['Tech Owner', 'Admin', 'Owner', 'Secretaría'].includes(myRoleName);
 
-        // CORRECCIÓN: La secretaria ahora entra en isStaff para saltar el filtro de soberanía
-        const isTechOwner = myRoleName === 'Tech Owner' || myRoleName === 'Admin' || myRoleName === 'Secretaría';
-
-        // 1. Base de la Query
         let query = `
             SELECT p.*, m.name as owner_name FROM patients p
             LEFT JOIN members m ON p.owner_member_id = m.id
             WHERE p.clinic_id = $1
         `;
 
-        // El primer parámetro siempre es clinicId ($1)
-        let params = [clinicId];
+        let params = [cId];
 
-        if (!isTechOwner) {
-            // 2. Obtenemos el filtro de soberanía
-            const filter = await getResourceFilter(pool, userId, clinicId, 'patients');
-
-            // Reemplazamos el alias 'a.' por 'p.' (de pacientes) para que coincida con nuestra tabla
+        if (!isStaff) {
+            const filter = await getResourceFilter(pool, uId, cId, 'patients');
             let filterQuery = filter.query.replace(/a\./g, 'p.');
-
-            // --- LÓGICA DE RE-INDEXACIÓN DINÁMICA ---
             const offset = params.length;
             filterQuery = filterQuery.replace(/\$(\d+)/g, (match, num) => `$${parseInt(num) + offset}`);
 
             query += ` AND ${filterQuery}`;
-
-            // Añadimos los valores correspondientes al array de parámetros
             params = [...params, ...filter.params];
         }
 
@@ -59,16 +51,20 @@ router.get('/', async (req, res) => {
         res.json({ data: rows });
 
     } catch (error) {
-        console.error("❌ Error en GET /patients:", error);
+        console.error("❌ Error en GET /patients:", error.message);
         res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// 2. OBTENER UN PACIENTE POR ID
+/**
+ * 2. OBTENER UN PACIENTE POR ID
+ */
 router.get('/:id', async (req, res) => {
     try {
-        const { rows } = await pool.query(`SELECT * FROM patients WHERE id = $1`, [req.params.id]);
+        const id = parseInt(req.params.id, 10);
+        const { rows } = await pool.query(`SELECT * FROM patients WHERE id = $1`, [id]);
         if (rows.length === 0) return res.status(404).json({ error: "No encontrado" });
+
         const patient = rows[0];
         if (!patient.history) patient.history = {};
         res.json({ data: patient });
@@ -77,7 +73,9 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// 3. REGISTRO DE NUEVO PACIENTE
+/**
+ * 3. REGISTRO DE NUEVO PACIENTE
+ */
 router.post('/', async (req, res) => {
     try {
         const {
@@ -103,9 +101,11 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 4. ACTUALIZAR PERFIL
+/**
+ * 4. ACTUALIZAR PERFIL
+ */
 router.put('/:id', async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
     const f = req.body;
     try {
         const query = `
@@ -124,49 +124,70 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// 5. OBTENER NOTAS DEL PACIENTE (CORREGIDO)
+/**
+ * 5. OBTENER NOTAS DEL PACIENTE (RBAC + Soberanía del Dato)
+ */
 router.get('/:id/notes', async (req, res) => {
-    const { id } = req.params;
-    const { userId, clinicId } = req.query;
-
     try {
-        if (!userId || !clinicId) return res.status(400).json({ error: "Faltan credenciales" });
+        const patientId = parseInt(req.params.id, 10);
+        const { userId, clinicId } = req.query;
 
-        const memberKey = await pool.query(
-            `SELECT m.id, r.name as role_name FROM members m 
-             JOIN roles r ON m.role_id = r.id 
+        if (isNaN(patientId) || !userId || !clinicId) {
+            return res.status(400).json({ error: "Faltan parámetros de identificación" });
+        }
+
+        // 1. Obtener el Rol y el MemberID del usuario que consulta
+        const userAccess = await pool.query(
+            `SELECT m.id as current_member_id, m.role_id 
+             FROM members m 
              WHERE m.user_id = $1 AND m.clinic_id = $2`,
-            [userId, clinicId]
+            [parseInt(userId, 10), parseInt(clinicId, 10)]
         );
 
-        if (memberKey.rows.length === 0) return res.status(403).json({ error: "No autorizado" });
+        if (userAccess.rows.length === 0) return res.json({ data: [] });
 
-        const myRoleName = memberKey.rows[0].role_name;
-        const isStaff = ['Tech Owner', 'Admin', 'Secretaria'].includes(myRoleName);
+        const { current_member_id, role_id } = userAccess.rows[0];
 
-        const filter = await getResourceFilter(pool, userId, clinicId, 'patients');
-
-        const query = `
-            SELECT n.*, m.name as author_name 
+        // 2. Consulta de Notas con JOIN opcional para el nombre del profesional
+        let query = `
+            SELECT 
+                n.*, 
+                m.name as author_name 
             FROM clinical_notes n
-            JOIN members m ON n.member_id = m.id
-            JOIN patients p ON n.patient_id = p.id
+            LEFT JOIN members m ON n.member_id = m.id
             WHERE n.patient_id = $1
-            AND p.clinic_id = $2
-            AND (${isStaff ? '1=1' : `(${filter.query.replace(/a\./g, 'p.')} OR p.owner_member_id = $3)`})
-            ORDER BY n.created_at DESC
         `;
 
-        const params = isStaff
-            ? [id, clinicId]
-            : [id, clinicId, memberKey.rows[0].id, ...filter.params];
+        let params = [patientId];
+
+        // Lógica RBAC:
+        // Si no es Tech Owner (0) ni Owner (2), solo ve sus propias notas
+        if (role_id !== 0 && role_id !== 2) {
+            query += ` AND n.member_id = $2`;
+            params.push(current_member_id);
+        }
+
+        query += ` ORDER BY n.created_at DESC`;
 
         const { rows } = await pool.query(query, params);
-        res.json({ data: rows });
+
+        // 3. Inyectar 'canEdit' basado en la soberanía (solo el autor edita)
+        const notesWithPermissions = rows.map(note => ({
+            ...note,
+            canEdit: note.member_id === current_member_id
+        }));
+
+        res.json({
+            success: true,
+            data: notesWithPermissions
+        });
 
     } catch (error) {
-        console.error("❌ Error en GET Notes:", error.message);
-        res.status(500).json({ error: "Error interno" });
+        console.error("❌ ERROR EN NEON:", error.message);
+        res.status(500).json({
+            error: "Error al recuperar notas",
+            details: error.message
+        });
     }
 });
 
