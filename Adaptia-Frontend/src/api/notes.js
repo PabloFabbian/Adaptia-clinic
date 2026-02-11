@@ -31,26 +31,24 @@ export const getPatientById = async (patientId) => {
  * @param {number} clinicId - ID de la clínica activa
  */
 export const getPatientNotes = async (patientId, userId, clinicId) => {
-    // Validación de seguridad: Prevenir peticiones incompletas
+    // Volvemos a exigir los 3 porque el Back así lo pide
     if (!patientId || !userId || !clinicId) {
-        console.warn("⚠️ Parámetros insuficientes detectados antes del fetch.");
+        console.warn("⚠️ Parámetros insuficientes para la API.");
         return { data: [] };
     }
 
-    // Los parámetros se envían como Query Params. 
-    // Nota: El backend debe usar parseInt() para evitar el error de tipos en PostgreSQL.
     const url = `${API_URL}/patients/${patientId}/notes?userId=${userId}&clinicId=${clinicId}`;
 
     try {
         const response = await fetch(url);
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Error interno en el servidor');
+            throw new Error(errorData.error || 'Error en el servidor');
         }
         return await response.json();
     } catch (error) {
         console.error("❌ API Error [getPatientNotes]:", error);
-        throw error; // Re-lanzamos para que el componente maneje el estado de error
+        throw error;
     }
 };
 

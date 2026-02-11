@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-    Calendar, Search, FileText, Sparkles,
-    ChevronDown, ChevronUp, Pill, Brain, Save, Loader2, ArrowLeft, ShieldAlert, Lock, EyeOff
+    Calendar, FileText, Sparkles,
+    ChevronDown, ChevronUp, Pill, Brain, Save, Loader2, ArrowLeft, ShieldAlert, Lock, Eye
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
@@ -11,16 +11,9 @@ import { useAuth } from '../context/AuthContext';
 import { getPatientNotes, getPatientById, updatePatient, exportHistoryToPDF } from '../api/notes';
 import { ROLE } from '../constants/roles';
 
-// Componente de contenido expandible con lógica de restricción
-const ExpandableContent = ({ text, isRestricted }) => {
+// Componente de contenido expandible 
+const ExpandableContent = ({ text }) => {
     const [isExpanded, setIsExpanded] = useState(false);
-
-    if (isRestricted) return (
-        <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-gray-200 dark:border-slate-700">
-            <EyeOff size={14} className="text-gray-400" />
-            <p className="text-gray-400 italic text-[11px]">Contenido clínico reservado para el profesional a cargo.</p>
-        </div>
-    );
 
     if (!text) return <p className="text-gray-400 dark:text-gray-500 italic text-sm">Sin contenido detallado</p>;
     const isLongText = text.length > 250;
@@ -30,7 +23,7 @@ const ExpandableContent = ({ text, isRestricted }) => {
             <div className={`relative transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[2000px]' : 'max-h-24 overflow-hidden'}`}>
                 <p className="text-gray-600 dark:text-gray-300 leading-relaxed text-sm whitespace-pre-wrap">{text}</p>
                 {!isExpanded && isLongText && (
-                    <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-t from-white dark:from-[#1a1f2e] via-white/80 dark:via-[#1a1f2e]/80 to-transparent" />
+                    <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white dark:from-[#1a1f2e] via-white/80 dark:via-[#1a1f2e]/80 to-transparent" />
                 )}
             </div>
             {isLongText && (
@@ -55,7 +48,6 @@ export const PatientHistoryPage = () => {
     const [loading, setLoading] = useState(true);
     const [accessDenied, setAccessDenied] = useState(false);
     const [canEdit, setCanEdit] = useState(false);
-    const [isRestrictedView, setIsRestrictedView] = useState(false);
 
     const motivoRef = useRef(null);
     const antecedentesRef = useRef(null);
@@ -82,14 +74,17 @@ export const PatientHistoryPage = () => {
     useEffect(() => {
         const loadAllData = async () => {
             const clinicId = activeClinic?.id;
-            const userRoleId = user?.role_id; // Usar el rol del usuario directamente
+            const userId = user?.id; // Importante: necesitamos el ID del usuario actual
 
-            if (authLoading || !id || !clinicId) return;
+            if (authLoading || !id || !clinicId || !userId) return;
 
             setLoading(true);
             try {
+                // LLAMADA A LA API:
+                // Ahora siempre pasamos el userId. El Backend decidirá si filtrar 
+                // o mostrar todo según el rol (incluyendo el nuevo permiso de Secretaría).
                 const [notesResponse, patientResponse] = await Promise.all([
-                    getPatientNotes(id, user.id, clinicId),
+                    getPatientNotes(id, userId, clinicId),
                     getPatientById(id)
                 ]);
 
@@ -102,26 +97,17 @@ export const PatientHistoryPage = () => {
                         medicacion: p.history?.medicacion || ''
                     });
 
-                    // --- LÓGICA DE GOBERNANZA ESTRICTA ---
-
-                    const isTechOwner = userRoleId === ROLE.TECH_OWNER;
+                    // GOBERNANZA: Quién puede editar el perfil (Se mantiene igual)
+                    const isTechOwner = user.role_id === ROLE.TECH_OWNER;
                     const isPatientOwner = p.owner_member_id === user.id;
-                    const isSecretaria = userRoleId === ROLE.SECRETARIA;
-
-                    // 1. ¿Quién puede editar? Solo Tech Owner o el Dueño del paciente.
-                    // El Owner de la clínica (si no es el dueño del paciente) NO puede editar.
                     setCanEdit(isTechOwner || isPatientOwner);
-
-                    // 2. ¿Quién ve el contenido restringido? 
-                    // Si es Secretaria O si es un profesional (incluido Owner) que NO es dueño del paciente.
-                    const restricted = isSecretaria || (!isTechOwner && !isPatientOwner);
-                    setIsRestrictedView(restricted);
                 }
 
                 const finalNotes = notesResponse?.data || [];
                 setNotes(Array.isArray(finalNotes) ? finalNotes : []);
 
             } catch (error) {
+                console.error("Error cargando datos:", error);
                 if (error.response?.status === 403) setAccessDenied(true);
                 toast.error("Error al cargar historial");
             } finally {
@@ -134,7 +120,7 @@ export const PatientHistoryPage = () => {
 
     const handleSaveProfile = async () => {
         if (!canEdit) {
-            toast.error("No tienes permisos para editar este perfil");
+            toast.error("Acceso denegado", { description: "Tu rol solo permite lectura." });
             return;
         }
         setIsSaving(true);
@@ -179,7 +165,7 @@ export const PatientHistoryPage = () => {
     };
 
     if (authLoading || loading) return (
-        <div className="h-screen flex items-center justify-center bg-transparent">
+        <div className="h-screen flex items-center justify-center">
             <Loader2 className="animate-spin text-orange-500" />
         </div>
     );
@@ -213,13 +199,13 @@ export const PatientHistoryPage = () => {
             <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-[2.5rem] p-8 shadow-xl">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-teal-500/10 text-teal-600 rounded-xl flex items-center justify-center border border-teal-500/20">
+                        <div className="w-10 h-10 bg-indigo-500/10 text-indigo-600 rounded-xl flex items-center justify-center border border-indigo-500/20">
                             <Brain size={20} />
                         </div>
                         <div>
                             <h2 className="text-lg font-bold leading-none dark:text-white">Perfil Psicológico</h2>
-                            <div className="flex items-center gap-1 mt-1 text-[9px] text-amber-600 font-bold uppercase tracking-tighter">
-                                <Lock size={10} /> {isRestrictedView ? 'Vista de Solo Lectura' : (canEdit ? 'Edición Habilitada' : 'Acceso Total')}
+                            <div className={`flex items-center gap-1 mt-1 text-[9px] font-black uppercase tracking-widest ${canEdit ? 'text-teal-600' : 'text-indigo-500'}`}>
+                                {canEdit ? <><Save size={10} /> Edición Habilitada</> : <><Eye size={10} /> Solo Lectura (Secretaría/Staff)</>}
                             </div>
                         </div>
                     </div>
@@ -241,36 +227,28 @@ export const PatientHistoryPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
                     <div className="md:col-span-2 space-y-6">
                         <div className="bg-gray-50 dark:bg-slate-800/40 p-5 rounded-[1.5rem] border border-gray-100 dark:border-slate-700/50">
-                            <label className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-2 block">Motivo de Consulta</label>
-                            {isRestrictedView ? (
-                                <ExpandableContent isRestricted={true} />
-                            ) : (
-                                <textarea
-                                    ref={motivoRef}
-                                    readOnly={!canEdit}
-                                    value={profile.motivo_consulta}
-                                    onChange={(e) => setProfile({ ...profile, motivo_consulta: e.target.value })}
-                                    className="w-full bg-transparent text-sm text-gray-700 dark:text-slate-200 focus:outline-none resize-none leading-relaxed"
-                                    rows="1"
-                                    placeholder="Sin información registrada"
-                                />
-                            )}
+                            <label className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-2 block">Motivo de Consulta</label>
+                            <textarea
+                                ref={motivoRef}
+                                readOnly={!canEdit}
+                                value={profile.motivo_consulta}
+                                onChange={(e) => setProfile({ ...profile, motivo_consulta: e.target.value })}
+                                className="w-full bg-transparent text-sm text-gray-700 dark:text-slate-200 focus:outline-none resize-none leading-relaxed"
+                                rows="1"
+                                placeholder="Sin información registrada"
+                            />
                         </div>
                         <div className="px-5">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Antecedentes</label>
-                            {isRestrictedView ? (
-                                <ExpandableContent isRestricted={true} />
-                            ) : (
-                                <textarea
-                                    ref={antecedentesRef}
-                                    readOnly={!canEdit}
-                                    value={profile.antecedentes}
-                                    onChange={(e) => setProfile({ ...profile, antecedentes: e.target.value })}
-                                    className="w-full bg-transparent text-sm italic text-gray-500 dark:text-gray-400 focus:outline-none resize-none leading-relaxed"
-                                    rows="1"
-                                    placeholder="Sin antecedentes"
-                                />
-                            )}
+                            <textarea
+                                ref={antecedentesRef}
+                                readOnly={!canEdit}
+                                value={profile.antecedentes}
+                                onChange={(e) => setProfile({ ...profile, antecedentes: e.target.value })}
+                                className="w-full bg-transparent text-sm italic text-gray-500 dark:text-gray-400 focus:outline-none resize-none leading-relaxed"
+                                rows="1"
+                                placeholder="Sin antecedentes"
+                            />
                         </div>
                     </div>
 
@@ -279,19 +257,15 @@ export const PatientHistoryPage = () => {
                             <Pill size={16} />
                             <span className="text-[10px] font-black uppercase tracking-[0.2em]">Medicación</span>
                         </div>
-                        {isRestrictedView ? (
-                            <p className="text-xs text-red-400 italic">Acceso restringido</p>
-                        ) : (
-                            <textarea
-                                ref={medicacionRef}
-                                readOnly={!canEdit}
-                                value={profile.medicacion}
-                                onChange={(e) => setProfile({ ...profile, medicacion: e.target.value })}
-                                className="w-full bg-transparent text-sm font-bold text-gray-800 dark:text-slate-100 focus:outline-none resize-none"
-                                rows="1"
-                                placeholder="No referida"
-                            />
-                        )}
+                        <textarea
+                            ref={medicacionRef}
+                            readOnly={!canEdit}
+                            value={profile.medicacion}
+                            onChange={(e) => setProfile({ ...profile, medicacion: e.target.value })}
+                            className="w-full bg-transparent text-sm font-bold text-gray-800 dark:text-slate-100 focus:outline-none resize-none"
+                            rows="1"
+                            placeholder="No referida"
+                        />
                     </div>
                 </div>
             </div>
@@ -314,29 +288,28 @@ export const PatientHistoryPage = () => {
                                             <span className="text-xs text-gray-400 flex items-center gap-1">
                                                 <Calendar size={12} /> {note.created_at ? new Date(note.created_at).toLocaleDateString() : '—'}
                                             </span>
+                                            {/* Badge adicional para saber quién escribió la nota */}
+                                            <span className="text-[10px] text-gray-400 italic">
+                                                Por: {note.author_name || 'Profesional'}
+                                            </span>
                                         </div>
                                         <h4 className="text-lg font-bold text-gray-900 dark:text-gray-100">{note.title || 'Nota de Sesión'}</h4>
                                     </div>
                                 </div>
 
-                                {/* Resumen IA oculto para Personal no autorizado */}
-                                {!isRestrictedView && (
-                                    <div className="mb-6 p-5 bg-orange-50 dark:bg-orange-950/10 rounded-3xl border border-orange-100 dark:border-orange-900/20">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest flex items-center gap-1">
-                                                <Sparkles size={12} /> Resumen IA
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-gray-700 dark:text-gray-300 italic leading-relaxed">
-                                            {note.summary ? `"${note.summary}"` : "No hay un resumen generado para esta nota."}
-                                        </p>
+                                {/* Resumen IA */}
+                                <div className="mb-6 p-5 bg-orange-50 dark:bg-orange-950/10 rounded-3xl border border-orange-100 dark:border-orange-900/20">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest flex items-center gap-1">
+                                            <Sparkles size={12} /> Resumen IA
+                                        </span>
                                     </div>
-                                )}
+                                    <p className="text-sm text-gray-700 dark:text-gray-300 italic leading-relaxed">
+                                        {note.summary ? `"${note.summary}"` : "No hay un resumen generado."}
+                                    </p>
+                                </div>
 
-                                <ExpandableContent
-                                    text={note.content || note.details}
-                                    isRestricted={isRestrictedView}
-                                />
+                                <ExpandableContent text={note.content || note.details} />
                             </div>
                         </div>
                     ))

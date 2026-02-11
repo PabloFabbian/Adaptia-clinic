@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
     Users, UserPlus, Search, Filter, Mail, Phone,
-    ShieldCheck, ChevronRight, Loader2, ShieldAlert, Lock
+    ShieldCheck, ChevronRight, Loader2, ShieldAlert, Lock, Eye
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -31,36 +31,19 @@ export const PatientsPage = () => {
 
     // --- LÓGICA DE GOBERNANZA ---
 
-    /**
-     * Determina si el usuario actual puede escribir notas o editar al paciente.
-     * Basado en permisos de rol y propiedad del registro.
-     */
     const canWriteNotes = (patient) => {
         if (!patient || !user) return false;
-
-        // 1. El Tech Owner siempre tiene acceso total
         if (user.role_id === ROLE.TECH_OWNER) return true;
-
-        // 2. Verificamos si su rol tiene permiso de escritura en las constantes
         const hasRolePermission = ACTION_PERMISSIONS.WRITE_CLINICAL_NOTES.includes(user.role_id);
-
-        // 3. RESTRICCIÓN ESTRICTA: 
-        // Solo puede escribir si tiene el permiso de Rol Y es el dueño directo del paciente
         return hasRolePermission && patient.owner_member_id === user.id;
     };
 
-    /**
-     * Define visualmente el nivel de acceso en la tabla
-     */
     const getAccessLevel = (patient) => {
         if (!patient || !user) return 'Read';
-
-        // Solo Full Access si es Tech Owner o el dueño real del paciente
         if (
             user.role_id === ROLE.TECH_OWNER ||
             patient.owner_member_id === user.id
         ) return 'Full';
-
         return 'Read';
     };
 
@@ -98,7 +81,7 @@ export const PatientsPage = () => {
 
             toast.success("Nota clínica guardada exitosamente");
             setIsNoteModalOpen(false);
-            refresh(); // Recargar datos para ver la nueva nota
+            refresh();
 
         } catch (err) {
             toast.error("Error al guardar", { description: err.message });
@@ -207,9 +190,9 @@ export const PatientsPage = () => {
                                             >
                                                 <td className="px-10 py-6">
                                                     <div className="flex items-center gap-5">
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm border ${isFullAccess
-                                                            ? 'bg-orange-500/10 text-orange-600 border-orange-500/10'
-                                                            : 'bg-gray-100 text-gray-400 border-gray-200'
+                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm border transition-all ${isFullAccess
+                                                            ? 'bg-orange-500/10 text-orange-600 border-orange-500/20 shadow-sm'
+                                                            : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20'
                                                             }`}>
                                                             {patient.name?.charAt(0)}
                                                         </div>
@@ -248,12 +231,12 @@ export const PatientsPage = () => {
                                                 </td>
                                                 <td className="px-10 py-6 text-right">
                                                     <div className="flex items-center justify-end gap-4">
-                                                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${isFullAccess
-                                                            ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20'
-                                                            : 'bg-gray-50 text-gray-300 border-gray-100 dark:bg-white/5 dark:border-white/10'
+                                                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.1em] border transition-all ${isFullAccess
+                                                            ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20 shadow-sm shadow-adaptia-mint/5'
+                                                            : 'bg-indigo-50 dark:bg-indigo-400/5 text-indigo-500 dark:text-indigo-300 border-indigo-100 dark:border-indigo-400/10'
                                                             }`}>
-                                                            {isFullAccess ? <ShieldCheck size={12} /> : <Lock size={11} />}
-                                                            {access}
+                                                            {isFullAccess ? <ShieldCheck size={12} /> : <Eye size={12} />}
+                                                            {isFullAccess ? 'Acceso Total' : 'Solo Lectura'}
                                                         </div>
                                                         <ChevronRight className="text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
                                                     </div>

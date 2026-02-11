@@ -125,7 +125,7 @@ router.put('/:id', async (req, res) => {
 });
 
 /**
- * 5. OBTENER NOTAS DEL PACIENTE (RBAC + Soberanía del Dato)
+ * 5. OBTENER NOTAS DEL PACIENTE (Ajustado para Secretaría)
  */
 router.get('/:id/notes', async (req, res) => {
     try {
@@ -136,7 +136,6 @@ router.get('/:id/notes', async (req, res) => {
             return res.status(400).json({ error: "Faltan parámetros de identificación" });
         }
 
-        // 1. Obtener el Rol y el MemberID del usuario que consulta
         const userAccess = await pool.query(
             `SELECT m.id as current_member_id, m.role_id 
              FROM members m 
@@ -148,11 +147,8 @@ router.get('/:id/notes', async (req, res) => {
 
         const { current_member_id, role_id } = userAccess.rows[0];
 
-        // 2. Consulta de Notas con JOIN opcional para el nombre del profesional
         let query = `
-            SELECT 
-                n.*, 
-                m.name as author_name 
+            SELECT n.*, m.name as author_name 
             FROM clinical_notes n
             LEFT JOIN members m ON n.member_id = m.id
             WHERE n.patient_id = $1
@@ -160,34 +156,28 @@ router.get('/:id/notes', async (req, res) => {
 
         let params = [patientId];
 
-        // Lógica RBAC:
-        // Si no es Tech Owner (0) ni Owner (2), solo ve sus propias notas
-        if (role_id !== 0 && role_id !== 2) {
+        // --- CAMBIO CLAVE AQUÍ ---
+        // 0: Tech Owner, 2: Owner, 6: Secretaría
+        // Si no es ninguno de estos tres, filtramos para que solo vea sus propias notas.
+        const isAdminRole = [0, 2, 6].includes(role_id);
+
+        if (!isAdminRole) {
             query += ` AND n.member_id = $2`;
             params.push(current_member_id);
         }
 
         query += ` ORDER BY n.created_at DESC`;
-
         const { rows } = await pool.query(query, params);
 
-        // 3. Inyectar 'canEdit' basado en la soberanía (solo el autor edita)
         const notesWithPermissions = rows.map(note => ({
             ...note,
             canEdit: note.member_id === current_member_id
         }));
 
-        res.json({
-            success: true,
-            data: notesWithPermissions
-        });
-
+        res.json({ success: true, data: notesWithPermissions });
     } catch (error) {
-        console.error("❌ ERROR EN NEON:", error.message);
-        res.status(500).json({
-            error: "Error al recuperar notas",
-            details: error.message
-        });
+        console.error("❌ ERROR:", error.message);
+        res.status(500).json({ error: "Error al recuperar notas" });
     }
 });
 
