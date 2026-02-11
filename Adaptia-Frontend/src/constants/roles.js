@@ -1,4 +1,3 @@
-// src/constants/roles.js
 export const ROLE = {
     TECH_OWNER: 0,
     OWNER: 2,
@@ -6,14 +5,17 @@ export const ROLE = {
     SECRETARIA: 6
 };
 
-// Definimos quién puede ver qué cosa por "clave"
 export const NAV_PERMISSIONS = {
-    // Solo Tech Owner y Owner (0, 2)
     MASTER: [ROLE.TECH_OWNER, ROLE.OWNER],
-
-    // Tech Owner, Owner y Psicólogo (0, 2, 4)
     PROFESSIONAL: [ROLE.TECH_OWNER, ROLE.OWNER, ROLE.PSICOLOGO],
-
-    // Todos (0, 2, 4, 6)
     PUBLIC: [ROLE.TECH_OWNER, ROLE.OWNER, ROLE.PSICOLOGO, ROLE.SECRETARIA]
+};
+
+export const ACTION_PERMISSIONS = {
+    // Quién puede crear pacientes desde cero
+    CREATE_PATIENT: [ROLE.TECH_OWNER, ROLE.OWNER, ROLE.SECRETARIA, ROLE.PSICOLOGO],
+    // Quién puede escribir notas clínicas (Solo dueños de registro o perfiles médicos)
+    WRITE_CLINICAL_NOTES: [ROLE.TECH_OWNER, ROLE.OWNER, ROLE.PSICOLOGO],
+    // Quién puede ver la lista general
+    VIEW_PATIENTS_LIST: [ROLE.TECH_OWNER, ROLE.OWNER, ROLE.PSICOLOGO, ROLE.SECRETARIA]
 };

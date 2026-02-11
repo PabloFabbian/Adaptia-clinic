@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 // Hooks y Contexto
 import { usePatients } from '../hooks/usePatients';
 import { useAuth } from '../context/AuthContext';
-import { ROLE } from '../../constants/roles'; // Importamos tus constantes
+import { ROLE, ACTION_PERMISSIONS } from '../constants/roles';
 
 // Componentes
 import { PatientDetailsPanel } from '../features/patients/PatientDetailsPanel';
@@ -29,11 +29,25 @@ export const PatientsPage = () => {
         setSelectedPatient
     );
 
-    // --- LÓGICA DE GOBERNANZA (EL CORAZÓN DEL SISTEMA) ---
-    const canEditPatient = (patient) => {
+    // --- LÓGICA DE GOBERNANZA ---
+
+    // Verifica si el usuario actual tiene permiso para añadir notas clínicas
+    const canWriteNotes = (patient) => {
         if (!patient || !user) return false;
-        // El Tech Owner (0) siempre puede. El dueño del registro también.
-        return user.role_id === ROLE.TECH_OWNER || patient.owner_member_id === user.id;
+
+        const hasRolePermission = ACTION_PERMISSIONS.WRITE_CLINICAL_NOTES.includes(user.role_id);
+
+        // El Tech Owner siempre puede. Otros deben tener el Rol médico Y ser dueños del registro
+        if (user.role_id === ROLE.TECH_OWNER) return true;
+
+        return hasRolePermission && patient.owner_member_id === user.id;
+    };
+
+    // Determina qué nivel de acceso visual se muestra en la tabla
+    const getAccessLevel = (patient) => {
+        if (!patient || !user) return 'Read';
+        if (user.role_id === ROLE.TECH_OWNER || patient.owner_member_id === user.id) return 'Full';
+        return 'Read';
     };
 
     const closePanel = () => {
@@ -42,10 +56,9 @@ export const PatientsPage = () => {
     };
 
     const handleSaveNote = async (formData) => {
-        // Validación de seguridad antes de disparar
-        if (!canEditPatient(selectedPatient)) {
+        if (!canWriteNotes(selectedPatient)) {
             toast.error("Acceso denegado", {
-                description: "No tienes permisos para añadir notas a este expediente."
+                description: "Tu perfil no tiene permisos para redactar notas clínicas."
             });
             return;
         }
@@ -111,12 +124,16 @@ export const PatientsPage = () => {
                             </p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => navigate('/nuevo-paciente')}
-                        className="flex items-center justify-center gap-2 bg-gray-900 dark:bg-adaptia-blue text-white px-7 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-xl shadow-adaptia-blue/20"
-                    >
-                        <UserPlus size={18} strokeWidth={2.5} /> Nuevo Registro
-                    </button>
+
+                    {/* Botón de Nuevo Registro - Visible para todos los autorizados */}
+                    {ACTION_PERMISSIONS.CREATE_PATIENT.includes(user?.role_id) && (
+                        <button
+                            onClick={() => navigate('/nuevo-paciente')}
+                            className="flex items-center justify-center gap-2 bg-gray-900 dark:bg-adaptia-blue text-white px-7 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-xl shadow-adaptia-blue/20"
+                        >
+                            <UserPlus size={18} strokeWidth={2.5} /> Nuevo Registro
+                        </button>
+                    )}
                 </header>
 
                 {/* Buscador */}
@@ -144,7 +161,7 @@ export const PatientsPage = () => {
                                 <tr className="text-[10px] font-black uppercase tracking-[0.2em]">
                                     <th className="px-10 py-6">Identidad</th>
                                     <th className="px-10 py-6">Contacto</th>
-                                    <th className="px-10 py-6">Gobernanza de Datos</th>
+                                    <th className="px-10 py-6">Profesional a Cargo</th>
                                     <th className="px-10 py-6 text-right">Acceso</th>
                                 </tr>
                             </thead>
@@ -165,7 +182,9 @@ export const PatientsPage = () => {
                                     </tr>
                                 ) : (
                                     filteredPatients.map((patient) => {
-                                        const hasEditAccess = canEditPatient(patient);
+                                        const access = getAccessLevel(patient);
+                                        const isFullAccess = access === 'Full';
+
                                         return (
                                             <tr
                                                 key={patient.id}
@@ -175,7 +194,7 @@ export const PatientsPage = () => {
                                             >
                                                 <td className="px-10 py-6">
                                                     <div className="flex items-center gap-5">
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm border ${hasEditAccess
+                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm border ${isFullAccess
                                                             ? 'bg-orange-500/10 text-orange-600 border-orange-500/10'
                                                             : 'bg-gray-100 text-gray-400 border-gray-200'
                                                             }`}>
@@ -198,16 +217,35 @@ export const PatientsPage = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-10 py-6">
-                                                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-colors ${hasEditAccess
-                                                        ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20'
-                                                        : 'bg-gray-50 text-gray-400 border-gray-100 dark:bg-white/5 dark:border-white/10'
-                                                        }`}>
-                                                        {hasEditAccess ? <ShieldCheck size={12} /> : <Lock size={11} />}
-                                                        {hasEditAccess ? 'Control Total' : 'Solo Lectura'}
-                                                    </span>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center text-[10px] font-bold text-gray-400 border border-gray-100 dark:border-white/10">
+                                                            {patient.owner_name?.charAt(0) || '?'}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                                {patient.owner_member_id === user?.id ? (
+                                                                    <span className="text-adaptia-mint font-black">Mío (Tú)</span>
+                                                                ) : (
+                                                                    patient.owner_name || 'Sin asignar'
+                                                                )}
+                                                            </p>
+                                                            <p className="text-[9px] uppercase tracking-tighter text-gray-400 font-medium">
+                                                                Responsable
+                                                            </p>
+                                                        </div>
+                                                    </div>
                                                 </td>
                                                 <td className="px-10 py-6 text-right">
-                                                    <ChevronRight className="inline text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
+                                                    <div className="flex items-center justify-end gap-4">
+                                                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${isFullAccess
+                                                            ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20'
+                                                            : 'bg-gray-50 text-gray-300 border-gray-100 dark:bg-white/5 dark:border-white/10'
+                                                            }`}>
+                                                            {isFullAccess ? <ShieldCheck size={12} /> : <Lock size={11} />}
+                                                            {access}
+                                                        </div>
+                                                        <ChevronRight className="text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );
@@ -224,13 +262,12 @@ export const PatientsPage = () => {
                 user={user}
                 activeClinic={activeClinic}
                 onClose={closePanel}
-                // Si NO tiene acceso, pasamos null para que el panel sepa que no debe dejar crear notas
-                onOpenNote={canEditPatient(selectedPatient) ? () => setIsNoteModalOpen(true) : null}
-                canEdit={canEditPatient(selectedPatient)}
+                // Si es Secretaria, canWriteNotes será false y no podrá abrir el modal de notas
+                onOpenNote={canWriteNotes(selectedPatient) ? () => setIsNoteModalOpen(true) : null}
+                canEdit={canWriteNotes(selectedPatient)}
             />
 
-            {/* Solo renderizamos el modal si efectivamente tiene permiso y está abierto */}
-            {isNoteModalOpen && canEditPatient(selectedPatient) && (
+            {isNoteModalOpen && canWriteNotes(selectedPatient) && (
                 <ClinicalNoteModal
                     isOpen={isNoteModalOpen}
                     patientName={selectedPatient?.name}

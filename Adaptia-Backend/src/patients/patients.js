@@ -4,12 +4,13 @@ import pool from '../config/db.js';
 
 const router = express.Router();
 
-// 1. LISTAR PACIENTES
+// 1. LISTAR PACIENTES (ARQUITECTURA DINÁMICA)
 router.get('/', async (req, res) => {
     try {
         const { userId, clinicId } = req.query;
         if (!userId || !clinicId) return res.json({ data: [] });
 
+        // Identificamos al miembro y su rol
         const memberKey = await pool.query(
             `SELECT m.id, r.name as role_name FROM members m 
              JOIN roles r ON m.role_id = r.id 
@@ -21,22 +22,45 @@ router.get('/', async (req, res) => {
 
         const myMemberId = memberKey.rows[0].id;
         const myRoleName = memberKey.rows[0].role_name;
-        const filter = await getResourceFilter(pool, userId, clinicId, 'patients');
-        const isTechOwner = myRoleName === 'Tech Owner';
 
-        const query = `
+        // CORRECCIÓN: La secretaria ahora entra en isStaff para saltar el filtro de soberanía
+        const isTechOwner = myRoleName === 'Tech Owner' || myRoleName === 'Admin' || myRoleName === 'Secretaría';
+
+        // 1. Base de la Query
+        let query = `
             SELECT p.*, m.name as owner_name FROM patients p
             LEFT JOIN members m ON p.owner_member_id = m.id
-            WHERE p.clinic_id = $1 
-            AND (${isTechOwner ? '1=1' : `(${filter.query.replace(/a\./g, 'p.')} OR p.owner_member_id = $2)`})
-            ORDER BY p.name ASC
+            WHERE p.clinic_id = $1
         `;
 
-        const params = isTechOwner ? [clinicId] : [clinicId, myMemberId, ...filter.params];
+        // El primer parámetro siempre es clinicId ($1)
+        let params = [clinicId];
+
+        if (!isTechOwner) {
+            // 2. Obtenemos el filtro de soberanía
+            const filter = await getResourceFilter(pool, userId, clinicId, 'patients');
+
+            // Reemplazamos el alias 'a.' por 'p.' (de pacientes) para que coincida con nuestra tabla
+            let filterQuery = filter.query.replace(/a\./g, 'p.');
+
+            // --- LÓGICA DE RE-INDEXACIÓN DINÁMICA ---
+            const offset = params.length;
+            filterQuery = filterQuery.replace(/\$(\d+)/g, (match, num) => `$${parseInt(num) + offset}`);
+
+            query += ` AND ${filterQuery}`;
+
+            // Añadimos los valores correspondientes al array de parámetros
+            params = [...params, ...filter.params];
+        }
+
+        query += ` ORDER BY p.name ASC`;
+
         const { rows } = await pool.query(query, params);
         res.json({ data: rows });
+
     } catch (error) {
-        res.status(500).json({ error: "Error interno", details: error.message });
+        console.error("❌ Error en GET /patients:", error);
+        res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
@@ -100,17 +124,14 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// 5. OBTENER NOTAS DEL PACIENTE (CORREGIDO Y SEGURO)
+// 5. OBTENER NOTAS DEL PACIENTE (CORREGIDO)
 router.get('/:id/notes', async (req, res) => {
-    const { id } = req.params; // ID del paciente
+    const { id } = req.params;
     const { userId, clinicId } = req.query;
 
     try {
-        if (!userId || !clinicId) {
-            return res.status(400).json({ error: "Sesión inválida", details: "Faltan credenciales" });
-        }
+        if (!userId || !clinicId) return res.status(400).json({ error: "Faltan credenciales" });
 
-        // 1. Verificamos quién pide la información
         const memberKey = await pool.query(
             `SELECT m.id, r.name as role_name FROM members m 
              JOIN roles r ON m.role_id = r.id 
@@ -121,12 +142,10 @@ router.get('/:id/notes', async (req, res) => {
         if (memberKey.rows.length === 0) return res.status(403).json({ error: "No autorizado" });
 
         const myRoleName = memberKey.rows[0].role_name;
+        const isStaff = ['Tech Owner', 'Admin', 'Secretaria'].includes(myRoleName);
 
-        // 2. Aplicamos filtro de soberanía para asegurar que el usuario puede ver este paciente
         const filter = await getResourceFilter(pool, userId, clinicId, 'patients');
-        const isTechOwner = myRoleName === 'Tech Owner';
 
-        // 3. Query de notas: Traemos las notas y el nombre del autor (psicólogo)
         const query = `
             SELECT n.*, m.name as author_name 
             FROM clinical_notes n
@@ -134,12 +153,11 @@ router.get('/:id/notes', async (req, res) => {
             JOIN patients p ON n.patient_id = p.id
             WHERE n.patient_id = $1
             AND p.clinic_id = $2
-            AND (${isTechOwner ? '1=1' : `(${filter.query.replace(/a\./g, 'p.')} OR p.owner_member_id = $3)`})
+            AND (${isStaff ? '1=1' : `(${filter.query.replace(/a\./g, 'p.')} OR p.owner_member_id = $3)`})
             ORDER BY n.created_at DESC
         `;
 
-        // Params: id_paciente, clinic_id, mi_id_miembro, + extras del filtro
-        const params = isTechOwner
+        const params = isStaff
             ? [id, clinicId]
             : [id, clinicId, memberKey.rows[0].id, ...filter.params];
 
@@ -148,7 +166,7 @@ router.get('/:id/notes', async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error en GET Notes:", error.message);
-        res.status(500).json({ error: "Error interno del servidor" });
+        res.status(500).json({ error: "Error interno" });
     }
 });
 

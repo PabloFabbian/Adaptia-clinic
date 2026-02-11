@@ -13,9 +13,9 @@ import { getPatientNotes, getPatientById, updatePatient, exportHistoryToPDF } fr
 // --- CONSTANTES DE ROLES (Jerarquía 0-4) ---
 const ROLE = {
     TECH_OWNER: 0,
-    OWNER: 1,
-    PSICOLOGO: 3,
-    SECRETARIA: 4
+    OWNER: 2,
+    PSICOLOGO: 4,
+    SECRETARIA: 6
 };
 
 const ExpandableContent = ({ text, isRestricted }) => {

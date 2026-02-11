@@ -46,6 +46,7 @@ export const getResourceFilter = async (pool, viewerUserId, clinicId, resourceTy
 
         if (hasGlobalCapability) {
             // Caso: Tiene permiso de rol. Ve lo suyo + lo compartido.
+            // Sincronizamos: $1=clinicId, $2=viewerMemberId, $3=consentKey
             return {
                 query: `(
                     a.owner_member_id = $2 
@@ -57,15 +58,14 @@ export const getResourceFilter = async (pool, viewerUserId, clinicId, resourceTy
                         AND c.clinic_id = $1
                     )
                 )`,
-                params: [viewerMemberId, config.consentKey]
-                // Nota: $1 es clinicId (ya pasado en el controller), 
-                // aquí ajustamos los índices para el array final.
+                params: [clinicId, viewerMemberId, config.consentKey]
             };
         } else {
             // Caso: No tiene capacidad en su rol. SOLO ve lo suyo.
+            // Sincronizamos: $1=clinicId (aunque no se use aquí, mantenemos estructura), $2=viewerMemberId
             return {
                 query: `a.owner_member_id = $2`,
-                params: [viewerMemberId]
+                params: [clinicId, viewerMemberId]
             };
         }
 

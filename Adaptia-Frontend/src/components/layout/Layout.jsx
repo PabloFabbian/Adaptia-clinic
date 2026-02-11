@@ -22,7 +22,7 @@ export const Layout = () => {
         if (rid === 0) return 'Tech Owner';
         if (rid <= 2) return 'Owner';
         if (rid <= 4) return 'Psicólogo';
-        if (rid <= 6) return 'Secretaria';
+        if (rid <= 6) return 'Secretaría';
         return 'Invitado';
     }, [user, activeClinic]);
 
