@@ -1,11 +1,15 @@
 import { useState, useMemo } from 'react';
-import { Users, UserPlus, Search, Filter, Mail, Phone, ShieldCheck, ChevronRight, Loader2, ShieldAlert } from 'lucide-react';
+import {
+    Users, UserPlus, Search, Filter, Mail, Phone,
+    ShieldCheck, ChevronRight, Loader2, ShieldAlert, Lock
+} from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 // Hooks y Contexto
 import { usePatients } from '../hooks/usePatients';
 import { useAuth } from '../context/AuthContext';
+import { ROLE } from '../../constants/roles'; // Importamos tus constantes
 
 // Componentes
 import { PatientDetailsPanel } from '../features/patients/PatientDetailsPanel';
@@ -13,19 +17,24 @@ import { ClinicalNoteModal } from '../features/patients/ClinicalNoteModal';
 
 export const PatientsPage = () => {
     const navigate = useNavigate();
-    // Extraemos activeClinic y user del contexto de Auth
     const { user, activeClinic, loading: authLoading } = useAuth();
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
     const [, setSearchParams] = useSearchParams();
 
-    // Inyectamos los datos de la sesión en el hook para la gobernanza
     const { patients, loading, refresh } = usePatients(
         activeClinic?.id,
         user?.id,
         setSelectedPatient
     );
+
+    // --- LÓGICA DE GOBERNANZA (EL CORAZÓN DEL SISTEMA) ---
+    const canEditPatient = (patient) => {
+        if (!patient || !user) return false;
+        // El Tech Owner (0) siempre puede. El dueño del registro también.
+        return user.role_id === ROLE.TECH_OWNER || patient.owner_member_id === user.id;
+    };
 
     const closePanel = () => {
         setSelectedPatient(null);
@@ -33,13 +42,15 @@ export const PatientsPage = () => {
     };
 
     const handleSaveNote = async (formData) => {
-        try {
-            if (!selectedPatient || !user?.id) {
-                toast.error("Error", { description: "Faltan datos de sesión o paciente" });
-                return;
-            }
+        // Validación de seguridad antes de disparar
+        if (!canEditPatient(selectedPatient)) {
+            toast.error("Acceso denegado", {
+                description: "No tienes permisos para añadir notas a este expediente."
+            });
+            return;
+        }
 
-            // Usamos la URL con el token para el POST de la nota
+        try {
             const response = await fetch('http://localhost:3001/api/clinical-notes', {
                 method: 'POST',
                 headers: {
@@ -48,7 +59,7 @@ export const PatientsPage = () => {
                 },
                 body: JSON.stringify({
                     patient_id: selectedPatient.id,
-                    member_id: user.id, // ID del profesional logueado
+                    member_id: user.id,
                     content: formData.details,
                     title: formData.title,
                     summary: formData.summary,
@@ -61,8 +72,6 @@ export const PatientsPage = () => {
             toast.success("Nota clínica guardada exitosamente");
             setIsNoteModalOpen(false);
             refresh();
-
-            // Refrescamos el paciente seleccionado para ver la nueva nota en el panel
             setSelectedPatient({ ...selectedPatient });
 
         } catch (err) {
@@ -110,6 +119,7 @@ export const PatientsPage = () => {
                     </button>
                 </header>
 
+                {/* Buscador */}
                 <div className="flex gap-4 mb-10 group">
                     <div className="relative flex-1">
                         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-adaptia-blue transition-colors" size={20} />
@@ -126,6 +136,7 @@ export const PatientsPage = () => {
                     </button>
                 </div>
 
+                {/* Tabla de Pacientes */}
                 <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] shadow-2xl overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left min-w-[800px]">
@@ -133,8 +144,8 @@ export const PatientsPage = () => {
                                 <tr className="text-[10px] font-black uppercase tracking-[0.2em]">
                                     <th className="px-10 py-6">Identidad</th>
                                     <th className="px-10 py-6">Contacto</th>
-                                    <th className="px-10 py-6">Estatus de Propiedad</th>
-                                    <th className="px-10 py-6 text-right">Ficha</th>
+                                    <th className="px-10 py-6">Gobernanza de Datos</th>
+                                    <th className="px-10 py-6 text-right">Acceso</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-dark-border">
@@ -153,48 +164,54 @@ export const PatientsPage = () => {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredPatients.map((patient) => (
-                                        <tr
-                                            key={patient.id}
-                                            onClick={() => setSelectedPatient(patient)}
-                                            className={`group hover:bg-gray-50/80 dark:hover:bg-white/[0.02] transition-all cursor-pointer ${selectedPatient?.id === patient.id ? 'bg-orange-50/50 dark:bg-adaptia-blue/5' : ''
-                                                }`}
-                                        >
-                                            <td className="px-10 py-6">
-                                                <div className="flex items-center gap-5">
-                                                    <div className="w-12 h-12 bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-2xl flex items-center justify-center font-bold text-sm border border-orange-500/10">
-                                                        {patient.name?.charAt(0)}
+                                    filteredPatients.map((patient) => {
+                                        const hasEditAccess = canEditPatient(patient);
+                                        return (
+                                            <tr
+                                                key={patient.id}
+                                                onClick={() => setSelectedPatient(patient)}
+                                                className={`group hover:bg-gray-50/80 dark:hover:bg-white/[0.02] transition-all cursor-pointer ${selectedPatient?.id === patient.id ? 'bg-orange-50/50 dark:bg-adaptia-blue/5' : ''
+                                                    }`}
+                                            >
+                                                <td className="px-10 py-6">
+                                                    <div className="flex items-center gap-5">
+                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm border ${hasEditAccess
+                                                            ? 'bg-orange-500/10 text-orange-600 border-orange-500/10'
+                                                            : 'bg-gray-100 text-gray-400 border-gray-200'
+                                                            }`}>
+                                                            {patient.name?.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-gray-900 dark:text-gray-100 leading-tight group-hover:text-adaptia-blue transition-colors">
+                                                                {patient.name}
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-400 font-mono mt-1">
+                                                                DNI: {patient.dni || 'S/D'}
+                                                            </p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-bold text-gray-900 dark:text-gray-100 leading-tight group-hover:text-adaptia-blue transition-colors">
-                                                            {patient.name}
-                                                        </p>
-                                                        <p className="text-[10px] text-gray-400 font-mono mt-1">
-                                                            DNI: {patient.dni || 'S/D'}
-                                                        </p>
+                                                </td>
+                                                <td className="px-10 py-6 text-gray-500 dark:text-gray-400">
+                                                    <div className="text-[11px] space-y-1 font-medium">
+                                                        <p className="flex items-center gap-2"><Mail size={13} /> {patient.email || '—'}</p>
+                                                        <p className="flex items-center gap-2"><Phone size={13} /> {patient.phone || '—'}</p>
                                                     </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-10 py-6 text-gray-500 dark:text-gray-400">
-                                                <div className="text-[11px] space-y-1 font-medium">
-                                                    <p className="flex items-center gap-2"><Mail size={13} /> {patient.email || '—'}</p>
-                                                    <p className="flex items-center gap-2"><Phone size={13} /> {patient.phone || '—'}</p>
-                                                </div>
-                                            </td>
-                                            <td className="px-10 py-6">
-                                                <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${patient.owner_member_id === user?.id
-                                                    ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20'
-                                                    : 'bg-adaptia-blue/5 text-adaptia-blue border-adaptia-blue/10'
-                                                    }`}>
-                                                    <ShieldCheck size={12} />
-                                                    {patient.owner_member_id === user?.id ? 'Mi Registro' : (patient.owner_name || 'Clínica')}
-                                                </span>
-                                            </td>
-                                            <td className="px-10 py-6 text-right">
-                                                <ChevronRight className="inline text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
-                                            </td>
-                                        </tr>
-                                    ))
+                                                </td>
+                                                <td className="px-10 py-6">
+                                                    <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-colors ${hasEditAccess
+                                                        ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20'
+                                                        : 'bg-gray-50 text-gray-400 border-gray-100 dark:bg-white/5 dark:border-white/10'
+                                                        }`}>
+                                                        {hasEditAccess ? <ShieldCheck size={12} /> : <Lock size={11} />}
+                                                        {hasEditAccess ? 'Control Total' : 'Solo Lectura'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-10 py-6 text-right">
+                                                    <ChevronRight className="inline text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
@@ -202,21 +219,25 @@ export const PatientsPage = () => {
                 </div>
             </div>
 
-            {/* AQUÍ ESTÁ EL CAMBIO CLAVE: Pasamos user y activeClinic al panel */}
             <PatientDetailsPanel
                 patient={selectedPatient}
                 user={user}
                 activeClinic={activeClinic}
                 onClose={closePanel}
-                onOpenNote={() => setIsNoteModalOpen(true)}
+                // Si NO tiene acceso, pasamos null para que el panel sepa que no debe dejar crear notas
+                onOpenNote={canEditPatient(selectedPatient) ? () => setIsNoteModalOpen(true) : null}
+                canEdit={canEditPatient(selectedPatient)}
             />
 
-            <ClinicalNoteModal
-                isOpen={isNoteModalOpen}
-                patientName={selectedPatient?.name}
-                onSave={handleSaveNote}
-                onClose={() => setIsNoteModalOpen(false)}
-            />
+            {/* Solo renderizamos el modal si efectivamente tiene permiso y está abierto */}
+            {isNoteModalOpen && canEditPatient(selectedPatient) && (
+                <ClinicalNoteModal
+                    isOpen={isNoteModalOpen}
+                    patientName={selectedPatient?.name}
+                    onSave={handleSaveNote}
+                    onClose={() => setIsNoteModalOpen(false)}
+                />
+            )}
         </div>
     );
 };
