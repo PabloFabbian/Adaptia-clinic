@@ -25,7 +25,13 @@ export const AuthProvider = ({ children }) => {
             if (!response.ok) throw new Error('Error al obtener capacidades');
 
             const capabilities = await response.json();
-            const permissions = capabilities.map(c => c.slug || c.capability?.slug || c);
+
+            // Normalizamos los permisos a un array de strings (slugs)
+            // Esto permite hacer: userPermissions.includes('patients.read')
+            const permissions = capabilities.map(c => {
+                const slug = c.slug || c.capability?.slug || c;
+                return typeof slug === 'string' ? slug.toLowerCase() : slug;
+            });
 
             setUserPermissions(permissions);
             localStorage.setItem('adaptia_permissions', JSON.stringify(permissions));
@@ -35,14 +41,13 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    // 2. Cambiar de clínica y forzar el role_id
+    // 2. Cambiar de clínica
     const switchClinic = useCallback(async (membership) => {
         if (!membership) return;
 
         const clinicData = {
             id: String(membership.clinic_id || membership.id),
             name: membership.clinic_name || membership.name || "Clínica",
-            // Forzamos Number para que el Sidebar pueda comparar (0 === 0)
             role_id: Number(membership.role_id),
             role_name: membership.role_name || (Number(membership.role_id) === 0 ? "Tech Owner" : "Miembro")
         };
@@ -50,11 +55,10 @@ export const AuthProvider = ({ children }) => {
         setActiveClinic(clinicData);
         localStorage.setItem('adaptia_active_clinic', JSON.stringify(clinicData));
 
-        // Pedir permisos al backend
         await fetchMyPermissions(clinicData.role_id, clinicData.id);
     }, [fetchMyPermissions]);
 
-    // 3. Login (Usa la lógica que te funciona pero normalizando el Role 0)
+    // 3. Login
     const login = async (userData) => {
         try {
             const clinicRole = userData.activeClinic?.role_id;
@@ -62,13 +66,12 @@ export const AuthProvider = ({ children }) => {
                 ? Number(clinicRole)
                 : null;
 
-            // Si el backend no manda 'memberships', creamos una basada en la activeClinic
             const memberships = userData.memberships || (userData.activeClinic ? [userData.activeClinic] : []);
 
             const normalizedUser = {
                 ...userData,
                 role_id: numericRoleId,
-                memberships: memberships // Nos aseguramos de que esto exista
+                memberships: memberships
             };
 
             setUser(normalizedUser);
@@ -91,7 +94,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // 4. Inicialización (Persistencia al recargar F5)
+    // 4. Inicialización
     useEffect(() => {
         const initAuth = async () => {
             try {
@@ -110,6 +113,7 @@ export const AuthProvider = ({ children }) => {
 
                         if (savedPerms) setUserPermissions(JSON.parse(savedPerms));
 
+                        // Re-validamos permisos con el servidor para estar seguros
                         fetchMyPermissions(clinic.role_id, clinic.id);
                     }
                 }
@@ -131,10 +135,26 @@ export const AuthProvider = ({ children }) => {
         window.location.href = '/login';
     };
 
-    // 6. Helper para verificar roles en el Sidebar y otros componentes
-    const hasRole = (roleIdentifiers) => {
-        if (!activeClinic) return false;
+    // --- NUEVOS HELPERS DE GOBERNANZA ---
 
+    /**
+     * Comprueba si el usuario tiene una capacidad específica (Permiso Fino)
+     * @param {string} permission - El slug del permiso (ej: 'patients.write')
+     * @returns {boolean}
+     */
+    const can = useCallback((permission) => {
+        if (!permission) return false;
+        // El Tech Owner (Rol 0) suele saltarse las validaciones de permisos finos
+        if (Number(activeClinic?.role_id) === 0) return true;
+
+        return userPermissions.includes(permission.toLowerCase());
+    }, [userPermissions, activeClinic]);
+
+    /**
+     * Verifica roles (Permiso Grueso)
+     */
+    const hasRole = useCallback((roleIdentifiers) => {
+        if (!activeClinic) return false;
         const identifiers = Array.isArray(roleIdentifiers) ? roleIdentifiers : [roleIdentifiers];
         const currentRoleId = Number(activeClinic.role_id);
         const currentRoleName = activeClinic.role_name?.toLowerCase().trim();
@@ -143,7 +163,7 @@ export const AuthProvider = ({ children }) => {
             if (typeof id === 'number') return currentRoleId === id;
             return currentRoleName === String(id).toLowerCase().trim();
         });
-    };
+    }, [activeClinic]);
 
     return (
         <AuthContext.Provider value={{
@@ -154,7 +174,8 @@ export const AuthProvider = ({ children }) => {
             activeClinic,
             userPermissions,
             switchClinic,
-            hasRole
+            hasRole,
+            can // <--- Exportamos la nueva función
         }}>
             {!loading && children}
         </AuthContext.Provider>

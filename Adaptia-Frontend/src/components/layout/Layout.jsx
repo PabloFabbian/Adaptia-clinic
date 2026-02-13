@@ -69,11 +69,11 @@ export const Layout = () => {
                     <div className="flex items-center">
                         <button
                             onClick={() => navigate(-1)}
-                            className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors mr-4"
+                            className="text-gray-400 hover:text-gray-700 hover:cursor-pointer dark:hover:text-gray-200 transition-colors mr-4"
                         >
                             <ArrowLeft size={18} strokeWidth={1.5} />
                         </button>
-                        <h1 className="text-sm font-medium text-gray-600 dark:text-dark-text uppercase tracking-widest">
+                        <h1 className="text-sm font-medium text-gray-600 dark:text-dark-text uppercase tracking-widest cursor-default">
                             {getPageTitle()}
                         </h1>
                     </div>

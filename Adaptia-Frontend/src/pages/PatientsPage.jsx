@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
     Users, UserPlus, Search, Filter, Mail, Phone,
-    ShieldCheck, ChevronRight, Loader2, ShieldAlert, Lock, Eye
+    ShieldCheck, ChevronRight, Loader2, ShieldAlert, Eye
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -9,15 +9,15 @@ import { toast } from 'sonner';
 // Hooks y Contexto
 import { usePatients } from '../hooks/usePatients';
 import { useAuth } from '../context/AuthContext';
-import { ROLE, ACTION_PERMISSIONS } from '../constants/roles';
 
 // Componentes
 import { PatientDetailsPanel } from '../features/patients/PatientDetailsPanel';
 import { ClinicalNoteModal } from '../features/patients/ClinicalNoteModal';
+import { Can } from '../components/auth/Can'; // Importamos el nuevo componente
 
 export const PatientsPage = () => {
     const navigate = useNavigate();
-    const { user, activeClinic, loading: authLoading } = useAuth();
+    const { user, activeClinic, loading: authLoading, can } = useAuth();
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
@@ -29,21 +29,35 @@ export const PatientsPage = () => {
         setSelectedPatient
     );
 
-    // --- LÓGICA DE GOBERNANZA ---
+    // --- LÓGICA DE GOBERNANZA ACTUALIZADA ---
 
-    const canWriteNotes = (patient) => {
+    /**
+     * Define si puede escribir notas. 
+     * Combina Permiso Fino (matriz) + Regla de Negocio (Ownership/TechOwner)
+     */
+    const canWriteNotes = useCallback((patient) => {
         if (!patient || !user) return false;
-        if (user.role_id === ROLE.TECH_OWNER) return true;
-        const hasRolePermission = ACTION_PERMISSIONS.WRITE_CLINICAL_NOTES.includes(user.role_id);
-        return hasRolePermission && patient.owner_member_id === user.id;
-    };
 
+        // 1. El Tech Owner (Rol 0) siempre puede
+        if (Number(activeClinic?.role_id) === 0) return true;
+
+        // 2. Comprobamos si el rol tiene el permiso en la matriz
+        const hasMatrixPermission = can('notes.write');
+
+        // 3. Verificamos si es el dueño del expediente (Soberanía de datos)
+        const isOwner = patient.owner_member_id === user.id;
+
+        return hasMatrixPermission && isOwner;
+    }, [user, activeClinic, can]);
+
+    /**
+     * Determina visualmente el nivel de acceso en la tabla
+     */
     const getAccessLevel = (patient) => {
         if (!patient || !user) return 'Read';
-        if (
-            user.role_id === ROLE.TECH_OWNER ||
-            patient.owner_member_id === user.id
-        ) return 'Full';
+        if (Number(activeClinic?.role_id) === 0 || patient.owner_member_id === user.id) {
+            return 'Full';
+        }
         return 'Read';
     };
 
@@ -55,7 +69,7 @@ export const PatientsPage = () => {
     const handleSaveNote = async (formData) => {
         if (!canWriteNotes(selectedPatient)) {
             toast.error("Acceso denegado", {
-                description: "No tienes permisos para redactar notas en este expediente."
+                description: "No tienes permisos o no eres el responsable de este expediente."
             });
             return;
         }
@@ -122,14 +136,15 @@ export const PatientsPage = () => {
                         </div>
                     </div>
 
-                    {ACTION_PERMISSIONS.CREATE_PATIENT.includes(user?.role_id) && (
+                    {/* Uso de Can para el botón de creación */}
+                    <Can perform="patients.write">
                         <button
                             onClick={() => navigate('/nuevo-paciente')}
                             className="flex items-center justify-center gap-2 bg-gray-900 dark:bg-adaptia-blue text-white px-7 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-xl shadow-adaptia-blue/20"
                         >
                             <UserPlus size={18} strokeWidth={2.5} /> Nuevo Registro
                         </button>
-                    )}
+                    </Can>
                 </header>
 
                 {/* Buscador */}

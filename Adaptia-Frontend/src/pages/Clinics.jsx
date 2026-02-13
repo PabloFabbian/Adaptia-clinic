@@ -36,14 +36,16 @@ const tabExplanations = {
     }
 };
 
-const ResourcePill = ({ active, label, onClick }) => (
+const ResourcePill = ({ active, label, onClick, disabled = false }) => (
     <button
         onClick={onClick}
+        disabled={disabled}
         className={`
             flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all duration-300 border
             ${active
                 ? 'bg-adaptia-mint/10 border-adaptia-mint/40 text-adaptia-mint shadow-[0_0_10px_rgba(80,227,194,0.1)]'
                 : 'bg-white/5 border-white/5 text-gray-500 opacity-60 hover:opacity-100 hover:border-white/20'}
+            ${disabled ? 'cursor-not-allowed opacity-40 grayscale' : 'cursor-pointer active:scale-95'}
         `}
     >
         <span className="text-[9px] font-bold uppercase tracking-tight">{label}</span>
@@ -77,7 +79,7 @@ export const Clinics = () => {
     }, [activeClinic?.id, fetchDirectory, fetchGovernance]);
 
     const handleRoleToggle = async (roleName, cap) => {
-        if (!activeClinic?.id) return;
+        if (!activeClinic?.id || !canManageGovernance) return;
         const isAssigned = governanceMatrix[roleName]?.some(g => g.resource === cap.slug);
         const action = isAssigned ? 'revoke' : 'grant';
         await toggleRolePermission(activeClinic.id, roleName, cap.id, action);
@@ -124,7 +126,6 @@ export const Clinics = () => {
 
     return (
         <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-1000 p-4 pb-20">
-            {/* HEADER DINÁMICO: Resuelve el problema del nombre */}
             <header className="mb-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
                 <div>
                     <div className="flex items-center gap-2 text-adaptia-mint font-bold text-[10px] uppercase tracking-[0.2em] mb-2">
@@ -202,7 +203,6 @@ export const Clinics = () => {
                                                 </div>
                                             </div>
                                             <div className="flex flex-wrap gap-2 md:w-1/2 justify-center md:justify-start">
-                                                {/* Filtramos capacidades clave para la vista de miembros */}
                                                 {capabilities.filter(c => ['patients.read', 'appointments.read', 'notes.read'].some(slug => c.slug.includes(slug))).map(cap => {
                                                     const isGranted = member.consents?.some(c => c.resource_type === cap.slug.split('.').pop() && c.is_granted);
                                                     return (
@@ -241,7 +241,7 @@ export const Clinics = () => {
                                                         </div>
                                                         <div>
                                                             <h3 className="text-gray-900 dark:text-white text-xl font-light">{role.name}</h3>
-                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Capacidades asignadas</p>
+                                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Capacidades del Sistema</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -250,23 +250,13 @@ export const Clinics = () => {
                                                     {capabilities.map((cap) => {
                                                         const isAssigned = governanceMatrix[role.name]?.some(g => g.resource === cap.slug);
                                                         return (
-                                                            <button
-                                                                key={cap.id}
+                                                            <ResourcePill
+                                                                key={`${role.id}-${cap.id}`}
+                                                                label={cap.slug.replace('clinic.', '')}
+                                                                active={isAssigned}
                                                                 disabled={!canManageGovernance}
                                                                 onClick={() => handleRoleToggle(role.name, cap)}
-                                                                className={`
-                                                                    group flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-300
-                                                                    ${isAssigned
-                                                                        ? 'bg-adaptia-mint/10 border-adaptia-mint/30 text-adaptia-mint'
-                                                                        : 'bg-gray-50 dark:bg-white/5 border-transparent text-gray-400 opacity-40 hover:opacity-100'}
-                                                                    ${!canManageGovernance && 'cursor-not-allowed'}
-                                                                `}
-                                                            >
-                                                                <span className="text-[9px] font-bold uppercase tracking-tight truncate mr-2">
-                                                                    {cap.slug.replace('clinic.', '')}
-                                                                </span>
-                                                                {isAssigned ? <Check size={10} strokeWidth={3} /> : <div className="w-1 h-1 rounded-full bg-gray-300" />}
-                                                            </button>
+                                                            />
                                                         );
                                                     })}
                                                 </div>
@@ -276,7 +266,6 @@ export const Clinics = () => {
                                 </div>
                             )}
 
-                            {/* Tabs vacíos por ahora */}
                             {(activeTab === 'inicio' || activeTab === 'salas') && (
                                 <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-gray-100 dark:border-white/5 rounded-[3rem]">
                                     <Layout className="text-gray-200 mb-2" size={40} />
