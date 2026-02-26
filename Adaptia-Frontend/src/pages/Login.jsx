@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, Mail, Lock, AlertCircle, Loader2, UserPlus, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff, Sun, Moon } from 'lucide-react';
 
 export const Login = () => {
-    // 1. Estados de la UI
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -12,103 +11,81 @@ export const Login = () => {
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
-    // 2. Lógica de Invitación y Auth
+    const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
     const [searchParams] = useSearchParams();
     const token = searchParams.get('token');
-    const { user, login, logout } = useAuth(); // Añadimos user y logout
+    const { user, login, logout } = useAuth();
     const navigate = useNavigate();
 
-    // 3. Efecto para validar invitación y manejar sesiones previas
+    const toggleTheme = () => {
+        const switchTheme = () => {
+            const newIsDark = !isDark;
+            setIsDark(newIsDark);
+            if (newIsDark) {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme', 'light');
+            }
+        };
+
+        if (!document.startViewTransition) {
+            switchTheme();
+            return;
+        }
+        document.startViewTransition(switchTheme);
+    };
+
     useEffect(() => {
         if (token) {
-            // Si hay un token y ya hay un usuario logueado, cerramos sesión para evitar conflictos
-            if (user) {
-                logout();
-            }
-
-            setIsLogin(false); // Forzamos vista de registro
-
+            if (user) logout();
+            setIsLogin(false);
             const validateInvitation = async () => {
                 try {
                     const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clinics/invitations/validate/${token}`);
-
-                    // Verificación de seguridad para evitar el error JSON.parse
-                    const contentType = response.headers.get("content-type");
-                    if (!contentType || !contentType.includes("application/json")) {
-                        const text = await response.text();
-                        console.error("Respuesta no JSON del servidor:", text);
-                        throw new Error("El servidor de invitaciones no responde correctamente.");
-                    }
-
                     const data = await response.json();
-
                     if (response.ok) {
                         setEmail(data.email);
                         setSuccessMsg(`Invitación válida para ${data.clinic_name}`);
                     } else {
-                        setError(data.error || "La invitación ha expirado o no es válida");
+                        setError(data.error || "Invitación no válida");
                     }
                 } catch (err) {
-                    setError(err.message || "Error al conectar con el servidor de validación");
+                    setError("Error de conexión");
                 }
             };
             validateInvitation();
         }
-    }, [token]); // Quitamos 'user' de las dependencias para evitar bucles de logout
+    }, [token, user, logout]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
-
         const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
         const payload = isLogin ? { email, password } : { name, email, password };
 
         try {
-            // PASO A: Login o Registro de usuario
             const response = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+            const resData = await response.json();
+            if (!response.ok) throw new Error(resData.message || 'Error en la operación');
 
-            // Manejo seguro de JSON para evitar el "Unexpected character"
-            const contentType = response.headers.get("content-type");
-            let resData;
-            if (contentType && contentType.includes("application/json")) {
-                resData = await response.json();
-            } else {
-                const rawText = await response.text();
-                throw new Error(`Error del servidor: ${rawText.substring(0, 50)}...`);
-            }
-
-            if (!response.ok) {
-                throw new Error(resData.message || 'Error en la operación');
-            }
-
-            // PASO B: Si es registro con invitación, vinculamos a la clínica
             if (!isLogin && token) {
-                const acceptRes = await fetch(`${import.meta.env.VITE_API_URL}/api/clinics/accept-invitation`, {
+                await fetch(`${import.meta.env.VITE_API_URL}/api/clinics/accept-invitation`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        token: token,
-                        userId: resData.user.id
-                    })
+                    body: JSON.stringify({ token, userId: resData.user.id })
                 });
-
-                if (!acceptRes.ok) {
-                    const acceptData = await acceptRes.json();
-                    setError("Cuenta creada, pero hubo un problema al unirse a la clínica.");
-                    console.error("Error vinculación:", acceptData.error);
-                }
             }
-
-            // PASO C: Autenticar en la App
             login(resData.user);
-            navigate('/'); // Cambiado a '/' para que App.jsx decida a dónde ir
-
+            navigate('/');
         } catch (err) {
             setError(err.message);
         } finally {
@@ -117,102 +94,129 @@ export const Login = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#101828] px-4 transition-colors duration-500">
-            <div className="max-w-md w-full">
-                <div className="text-center mb-10">
-                    <div className="inline-flex p-5 bg-[#50e3c2] rounded-[2rem] text-gray-900 shadow-2xl shadow-[#50e3c2]/20 mb-6">
-                        {isLogin ? <LogIn size={32} strokeWidth={2.5} /> : <UserPlus size={32} strokeWidth={2.5} />}
+        <div className="min-h-screen w-full flex items-center justify-center bg-[#f8fafc] dark:bg-[#0f172a] relative overflow-hidden font-sans transition-colors duration-500">
+
+            {/* PATRÓN FLAT DE PUNTOS (OPCIONAL) */}
+            <div className="absolute inset-0 opacity-[0.4] dark:opacity-[0.1] [background-image:radial-gradient(#50e3c2_1px,transparent_1px)] [background-size:32px_32px] pointer-events-none" />
+
+            <div className="w-full max-w-[460px] z-10 px-6">
+                <div className="bg-white dark:bg-[#1e293b] rounded-[2rem] shadow-sm border border-gray-200 dark:border-slate-800 p-12 text-center relative">
+
+                    {/* INTERRUPTOR DE TEMA FLAT */}
+                    <button
+                        onClick={toggleTheme}
+                        className="absolute top-6 right-6 p-2 text-slate-400 hover:text-[#50e3c2] hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg transition-all active:scale-95"
+                        title="Cambiar Tema"
+                    >
+                        {isDark ? <Sun size={20} /> : <Moon size={20} />}
+                    </button>
+
+                    {/* ÁREA DEL LOGO */}
+                    <div className="flex flex-col items-center mb-10">
+                        <div className="flex items-center gap-1 mb-4">
+                            <img
+                                src="/Logo1.png"
+                                alt="Adaptia"
+                                className="h-12 mt-2 -ml-1 w-auto object-contain dark:brightness-110"
+                            />
+                            <h1 className="text-3xl font-bold text-[#50e3c2] tracking-tighter">
+                                CRM
+                            </h1>
+                        </div>
+                        <p className="text-gray-400 dark:text-gray-500 text-[10px] font-bold uppercase tracking-[0.25em] ml-1">
+                            {isLogin ? 'Terminal de Acceso Seguro' : 'Registro de Profesional'}
+                        </p>
                     </div>
-                    <h1 className="text-4xl font-black text-gray-900 dark:text-white tracking-tight">Adaptia</h1>
-                    <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">
-                        {isLogin ? 'Inicia sesión en tu clínica' : 'Crea tu cuenta profesional'}
-                    </p>
-                </div>
 
-                <div className="bg-white dark:bg-[#161f31] p-10 rounded-[3rem] border border-gray-100 dark:border-gray-800 shadow-xl">
-                    {successMsg && !error && (
-                        <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center gap-3 animate-in fade-in zoom-in duration-300">
-                            <CheckCircle2 size={18} />
-                            <span className="text-xs font-bold uppercase tracking-wide">{successMsg}</span>
+                    {/* ALERTAS FLAT */}
+                    {(successMsg || error) && (
+                        <div className={`mb-8 p-4 rounded-xl flex items-center gap-3 text-xs font-bold uppercase tracking-wider ${error
+                            ? 'bg-red-50 text-red-600 border border-red-100 dark:bg-red-500/5 dark:border-red-500/20'
+                            : 'bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-500/5 dark:border-emerald-500/20'
+                            }`}>
+                            {error ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+                            <span className="flex-1 text-left">{error || successMsg}</span>
                         </div>
                     )}
 
-                    {error && (
-                        <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 text-red-600 dark:text-red-400 rounded-2xl flex items-center gap-3">
-                            <AlertCircle size={18} />
-                            <span className="text-xs font-bold uppercase tracking-wide">{error}</span>
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-5 text-left">
                         {!isLogin && (
-                            <div className="animate-in fade-in slide-in-from-left-2 duration-300">
-                                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-2 ml-2">Nombre completo</label>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Nombre</label>
                                 <input
                                     type="text"
                                     required
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    className="w-full px-6 py-5 bg-gray-50 dark:bg-[#101828] border-2 border-transparent focus:border-[#50e3c2]/30 text-white rounded-[1.5rem] outline-none transition-all placeholder:text-gray-600"
-                                    placeholder="Dr. García"
+                                    className="w-full px-5 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#50e3c2] transition-colors placeholder:text-slate-400"
+                                    placeholder="Nombre completo"
                                 />
                             </div>
                         )}
 
                         <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-2 ml-2">Email profesional</label>
-                            <div className="relative group">
-                                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#50e3c2]" size={20} />
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Email</label>
+                            <div className="relative">
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <input
                                     type="email"
                                     required
                                     disabled={!!token}
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full pl-14 pr-6 py-5 bg-gray-50 dark:bg-[#101828] border-2 border-transparent focus:border-[#50e3c2]/30 text-white rounded-[1.5rem] outline-none transition-all disabled:opacity-50"
+                                    className="w-full pl-12 pr-5 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#50e3c2] transition-colors disabled:opacity-50"
                                     placeholder="correo@ejemplo.com"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-[0.15em] mb-2 ml-2">Contraseña</label>
-                            <div className="relative group">
-                                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#50e3c2]" size={20} />
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Contraseña</label>
+                            <div className="relative">
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                                 <input
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-14 pr-6 py-5 bg-gray-50 dark:bg-[#101828] border-2 border-transparent focus:border-[#50e3c2]/30 text-white rounded-[1.5rem] outline-none transition-all"
+                                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl outline-none focus:border-[#50e3c2] transition-colors"
                                     placeholder="••••••••"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#50e3c2]"
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
                             </div>
                         </div>
 
                         <button
                             disabled={loading}
-                            className="w-full py-5 bg-gray-900 dark:bg-[#50e3c2] text-white dark:text-gray-900 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.1em] shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3 disabled:opacity-70"
+                            className="w-full py-4 mt-2 bg-slate-900 dark:bg-[#50e3c2] text-white dark:text-slate-900 rounded-xl font-bold text-xs uppercase tracking-widest transition-all hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
                         >
-                            {loading ? <Loader2 className="animate-spin" size={20} /> : <span>{isLogin ? 'Entrar al Sistema' : 'Crear Cuenta'}</span>}
+                            {loading ? <Loader2 className="animate-spin" size={20} /> : <span>{isLogin ? 'Entrar' : 'Registrar'}</span>}
                         </button>
                     </form>
 
                     {!token && (
-                        <div className="mt-8 text-center border-t border-gray-100 dark:border-gray-800 pt-6">
+                        <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
                             <button
                                 onClick={() => setIsLogin(!isLogin)}
-                                className="text-[11px] font-bold text-gray-400 hover:text-[#50e3c2] uppercase tracking-widest transition-colors"
+                                className="text-[10px] font-bold text-slate-400 hover:text-[#50e3c2] uppercase tracking-widest transition-colors"
                             >
-                                {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Ingresa'}
+                                {isLogin ? 'Crear una cuenta' : 'Ya tengo cuenta'}
                             </button>
                         </div>
                     )}
                 </div>
 
-                <p className="text-center mt-10 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
-                    &copy; 2026 Adaptia Clinic &bull; Secure Terminal
-                </p>
+                <div className="text-center mt-8">
+                    <p className="text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">
+                        &copy; 2026 Adaptia Health &bull; CRM
+                    </p>
+                </div>
             </div>
         </div>
     );

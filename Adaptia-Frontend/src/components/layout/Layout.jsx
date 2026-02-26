@@ -5,20 +5,15 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 
 export const Layout = () => {
-    const { logout, user, activeClinic } = useAuth(); // Extraemos activeClinic
+    const { logout, user, activeClinic } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Estado para Dark Mode
     const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-    // --- LÓGICA DINÁMICA DE ROL ---
-    // Buscamos el rol del usuario en la clínica activa o el rol global
     const userRoleDisplay = useMemo(() => {
-        if (!user || activeClinic === null) return 'Sin Clínica'; // Cambio clave
-
+        if (!user || activeClinic === null) return 'Sin Clínica';
         const rid = Number(activeClinic.role_id);
-
         if (rid === 0) return 'Tech Owner';
         if (rid <= 2) return 'Owner';
         if (rid <= 4) return 'Psicólogo';
@@ -38,7 +33,6 @@ export const Layout = () => {
                 localStorage.setItem('theme', 'light');
             }
         };
-
         if (!document.startViewTransition) {
             switchTheme();
             return;
@@ -56,12 +50,12 @@ export const Layout = () => {
     };
 
     return (
-        <div className="flex h-screen bg-white dark:bg-dark-bg transition-colors duration-500">
+        <div className="flex h-screen bg-white dark:bg-dark-bg transition-colors duration-500 overflow-hidden">
             <Sidebar />
 
             <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="
-                    h-16 flex items-center justify-between px-10 transition-colors z-20
+                    h-16 flex items-center justify-between px-10 transition-colors z-20 shrink-0
                     bg-white/80 dark:bg-dark-surface/80 backdrop-blur-md
                     border-b border-[#50e3c2] dark:border-[#50e3c2]/30
                     shadow-[0_1px_10px_rgba(80,227,194,0.1)] dark:shadow-[0_4px_20px_rgba(80,227,194,0.05)]
@@ -79,7 +73,6 @@ export const Layout = () => {
                     </div>
 
                     <div className="flex items-center gap-6">
-                        {/* Perfil de usuario DINÁMICO */}
                         <div className="flex items-center gap-3 pr-6 border-r border-gray-100 dark:border-dark-border">
                             <div className="text-right hidden sm:block">
                                 <p className="text-xs font-bold text-gray-900 dark:text-gray-100 leading-none">
@@ -123,7 +116,7 @@ export const Layout = () => {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto px-10 py-8 bg-gray-50/30 dark:bg-dark-bg transition-colors">
+                <div className="flex-1 overflow-hidden bg-gray-50/30 dark:bg-dark-bg transition-colors">
                     <Outlet />
                 </div>
             </main>

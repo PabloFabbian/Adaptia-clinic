@@ -7,7 +7,7 @@ import { Toaster } from 'sonner';
 // --- PÁGINAS ---
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
-import SovereigntyPage from './pages/SovereigntyPage'; // <-- Nueva Importación
+import SovereigntyPage from './pages/SovereigntyPage';
 import { PatientsPage } from './pages/PatientsPage';
 import { PatientHistoryPage } from './pages/PatientHistoryPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -16,6 +16,7 @@ import { BillingPage } from './pages/BillingPage';
 import { CategoriesPage } from './pages/SystemPages';
 import Clinics from './pages/Clinics';
 import { NewPatient } from './pages/NewPatient';
+import { EditPatient } from './pages/EditPatient'; // <--- IMPORTACIÓN AÑADIDA
 import { Login } from './pages/Login';
 
 // --- UI & ICONS ---
@@ -67,12 +68,22 @@ function App() {
                 <PatientsPage />
               </ProtectedRoute>
             } />
+
+            {/* NUEVA RUTA DE EDICIÓN AÑADIDA */}
+            <Route path="pacientes/editar/:id" element={
+              <ProtectedRoute permission="patients.write">
+                <EditPatient />
+              </ProtectedRoute>
+            } />
+
             <Route path="pacientes/:id/historial" element={<PatientHistoryPage />} />
+
             <Route path="nuevo-paciente" element={
               <ProtectedRoute permission="patients.write">
                 <NewPatient />
               </ProtectedRoute>
             } />
+
             <Route path="calendario" element={<CalendarPage />} />
             <Route path="agendar" element={<BookingPage />} />
 
@@ -82,10 +93,9 @@ function App() {
               </ProtectedRoute>
             } />
 
-            {/* SECCIÓN SOBERANÍA (Actualizada) */}
+            {/* SECCIÓN SOBERANÍA */}
             <Route path="mis-permisos" element={
               <ProtectedRoute permission="clinic.resources.manage">
-                {/* Ahora usamos la página real y le pasamos la lógica de refresco */}
                 <SovereigntyPage fetchAppointments={fetchAppointments} />
               </ProtectedRoute>
             } />
@@ -104,10 +114,7 @@ function App() {
 
             {/* SISTEMA */}
             <Route path="clinicas" element={<Clinics />} />
-
-            {/* Settings ahora es más simple, no necesita props de carga de citas */}
             <Route path="settings" element={<Settings />} />
-
             <Route path="categorias" element={<CategoriesPage />} />
             <Route path="papelera" element={<PlaceholderPage title="Papelera" icon={Trash2} color="bg-gray-700" />} />
 

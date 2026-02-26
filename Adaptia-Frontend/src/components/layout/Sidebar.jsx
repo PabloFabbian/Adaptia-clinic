@@ -1,3 +1,4 @@
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ClinicSelector } from './ClinicSelector';
@@ -5,27 +6,26 @@ import { ROLE, NAV_PERMISSIONS } from '../../constants/roles';
 import {
     Home, Users, Calendar, CreditCard,
     Building2, PlusCircle, UserPlus,
-    Settings, Layers, Trash2, MessageSquare,
+    Settings, MessageSquare,
     ClipboardList, HeartHandshake, ShieldCheck
 } from 'lucide-react';
 
-const NavItem = ({ to, label, icon: Icon, access = 'PUBLIC', permission, currentRoleId, hasContext }) => {
+const NavItem = ({ to, label, icon: Icon, access = 'PUBLIC', permission }) => {
     const location = useLocation();
-    const { can } = useAuth(); // <--- Traemos el helper can
-    const active = location.pathname === to;
+    const { can, activeClinic, user } = useAuth();
 
-    // 1. Verificación por Rol (Grueso)
+    const active = location.pathname === to;
+    const rawRoleId = activeClinic?.role_id ?? user?.role_id;
+    const currentRoleId = rawRoleId !== null ? Number(rawRoleId) : null;
+    const hasContext = !!activeClinic;
+
     const allowedRoles = NAV_PERMISSIONS[access] || NAV_PERMISSIONS.PUBLIC;
     const isHiddenByRole = currentRoleId !== null && !allowedRoles.includes(currentRoleId);
-
-    // 2. Verificación por Permiso Específico (Fino)
-    // Si el componente recibe un "permission", preguntamos al contexto.
     const isHiddenByPermission = permission ? !can(permission) : false;
 
     const isTechOwner = currentRoleId === ROLE.TECH_OWNER;
     const isDisabled = !isTechOwner && !hasContext && to !== "/";
 
-    // Ocultamos si falla cualquiera de las dos verificaciones
     if (isHiddenByRole || isHiddenByPermission) return null;
 
     return (
@@ -54,18 +54,28 @@ const NavItem = ({ to, label, icon: Icon, access = 'PUBLIC', permission, current
     );
 };
 
-export const Sidebar = () => {
-    const { activeClinic, user, loading } = useAuth();
-    const rawRoleId = activeClinic?.role_id ?? user?.role_id;
-    const roleId = (rawRoleId !== null && rawRoleId !== undefined) ? Number(rawRoleId) : null;
-    const hasContext = !!activeClinic;
-
-    if (loading) return <aside className="w-64 h-screen bg-white dark:bg-[#0f172a] border-r border-gray-100 dark:border-white/5" />;
-
-    const navProps = { currentRoleId: roleId, hasContext };
+const NavSection = ({ title, children }) => {
+    const visibleChildren = React.Children.toArray(children).filter(child => child !== null);
+    if (visibleChildren.length === 0) return null;
 
     return (
-        <aside className="w-64 h-screen flex flex-col overflow-hidden bg-white dark:bg-[#181d27] border-r border-adaptia-mint dark:border-adaptia-mint/20 relative z-10">
+        <nav className="mb-6">
+            <p className="px-4 text-[10px] font-black text-gray-400/60 dark:text-gray-500 mb-3 tracking-[0.2em] uppercase">
+                {title}
+            </p>
+            <div className="space-y-0.5">{children}</div>
+        </nav>
+    );
+};
+
+export const Sidebar = () => {
+    const { loading } = useAuth();
+
+    if (loading) return <aside className="w-64 h-screen bg-white dark:bg-[#181d27] border-r border-gray-100 dark:border-white/5 animate-pulse" />;
+
+    return (
+        <aside className="w-64 h-screen flex flex-col overflow-hidden bg-white dark:bg-[#181d27] border-r border-[#50e3c2]/20 relative z-10">
+            {/* 1. BRANDING */}
             <div className="pt-8 pb-6 px-7">
                 <Link to="/" className="block">
                     <img src="/Logo1.png" alt="Adaptia" className="h-9 w-auto object-contain dark:brightness-110" />
@@ -76,52 +86,40 @@ export const Sidebar = () => {
                 <ClinicSelector />
             </div>
 
+            {/* 2. NAVEGACIÓN (3 SECCIONES) */}
             <div className="flex-1 overflow-y-auto px-4 custom-scrollbar">
-                {/* 1. SECCIÓN CLÍNICA */}
-                <nav className="mb-6">
-                    <p className="px-4 text-[10px] font-black text-gray-400/60 dark:text-gray-500 mb-3 tracking-[0.2em] uppercase">Gestión Clínica</p>
-                    <div className="space-y-0.5">
-                        <NavItem to="/" label="Inicio" icon={Home} {...navProps} />
-                        <NavItem to="/pacientes" label="Pacientes" icon={Users} permission="patients.read" {...navProps} />
-                        <NavItem to="/calendario" label="Agenda y Turnos" icon={Calendar} {...navProps} />
-                        <NavItem to="/notas" label="Notas Clínicas" icon={ClipboardList} permission="clinical_notes.read" {...navProps} />
-                    </div>
-                </nav>
 
-                {/* 2. SECCIÓN SOBERANÍA */}
-                <nav className="mb-6">
-                    <p className="px-4 text-[10px] font-black text-gray-400/60 dark:text-gray-500 mb-3 tracking-[0.2em] uppercase">Soberanía</p>
-                    <div className="space-y-0.5">
-                        <NavItem to="/mis-permisos" label="Compartir Recursos" icon={ShieldCheck} permission="clinic.resources.manage" {...navProps} />
-                        <NavItem to="/supervision" label="Supervisión" icon={HeartHandshake} {...navProps} />
-                    </div>
-                </nav>
+                <NavSection title="Gestión Clínica">
+                    <NavItem to="/" label="Inicio" icon={Home} />
+                    <NavItem to="/pacientes" label="Pacientes" icon={Users} permission="patients.read" />
+                    <NavItem to="/calendario" label="Agenda y Turnos" icon={Calendar} />
+                    <NavItem to="/notas" label="Notas Clínicas" icon={ClipboardList} permission="clinical_notes.read" />
+                </NavSection>
 
-                {/* 3. SECCIÓN ADMINISTRATIVA */}
-                <nav className="mb-6">
-                    <p className="px-4 text-[10px] font-black text-gray-400/60 dark:text-gray-500 mb-3 tracking-[0.2em] uppercase">Administración</p>
-                    <div className="space-y-0.5">
-                        <NavItem to="/facturacion" label="Honorarios" icon={CreditCard} access="MASTER" permission="clinic.billing.read" {...navProps} />
-                        <NavItem to="/clinicas" label="Gobernanza" icon={Building2} access="MASTER" {...navProps} />
-                    </div>
-                </nav>
+                <NavSection title="Soberanía">
+                    <NavItem to="/mis-permisos" label="Compartir Recursos" icon={ShieldCheck} permission="clinic.resources.manage" />
+                    <NavItem to="/supervision" label="Supervisión" icon={HeartHandshake} />
+                </NavSection>
 
-                <div className="mb-6">
-                    <p className="px-4 text-[10px] font-black text-gray-400/60 dark:text-gray-500 mb-3 tracking-[0.2em] uppercase">Acciones</p>
-                    <div className="space-y-0.5">
-                        <NavItem to="/agendar" label="Agendar Cita" icon={PlusCircle} {...navProps} />
-                        <NavItem to="/nuevo-paciente" label="Alta Paciente" icon={UserPlus} access="PROFESSIONAL" permission="patients.write" {...navProps} />
-                    </div>
-                </div>
+                <NavSection title="Administración">
+                    <NavItem to="/facturacion" label="Honorarios" icon={CreditCard} access="MASTER" permission="clinic.billing.read" />
+                    <NavItem to="/clinicas" label="Gobernanza" icon={Building2} access="MASTER" />
+                    <NavItem to="/agendar" label="Nueva Cita" icon={PlusCircle} />
+                    <NavItem to="/nuevo-paciente" label="Alta Paciente" icon={UserPlus} access="PROFESSIONAL" permission="patients.write" />
+                </NavSection>
+
             </div>
 
+            {/* 3. SISTEMA Y SOPORTE (SECCIÓN INFERIOR) */}
             <div className="p-4 mt-auto border-t border-gray-50 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
-                <NavItem to="/settings" label="Configuración" icon={Settings} access="PUBLIC" {...navProps} />
-                <button className="flex items-center gap-3 w-full px-4 py-3 text-[11px] font-bold text-gray-400 hover:text-[#50e3c2] transition-all uppercase tracking-widest mt-2">
+                <NavItem to="/settings" label="Configuración" icon={Settings} />
+                <button className="flex items-center gap-3 w-full px-4 py-3 text-[11px] font-bold text-gray-400 hover:text-[#50e3c2] transition-all uppercase tracking-widest mt-1">
                     <MessageSquare size={16} />
-                    <span>Soporte</span>
+                    <span>Soporte Adaptia</span>
                 </button>
             </div>
         </aside>
     );
 };
+
+//Seleccionar a mano que ROL puede ver que NAVITEM del Sidebar

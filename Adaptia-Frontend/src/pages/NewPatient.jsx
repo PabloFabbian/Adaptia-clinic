@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, ArrowLeft, Mail, Phone, CreditCard, MapPin, AlertCircle, ExternalLink, Calendar, Save, Edit3, HeartPulse, Fingerprint, BrainCircuit } from 'lucide-react';
+import { UserPlus, ArrowLeft, Mail, Phone, CreditCard, MapPin, AlertCircle, ExternalLink, Calendar, Save, Edit3, HeartPulse, Fingerprint, BrainCircuit, Plus, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
@@ -33,14 +33,12 @@ export const NewPatient = () => {
         }
     });
 
-    // Carga de datos inicial en modo edición
     useEffect(() => {
         if (isEditMode) {
             const fetchPatient = async () => {
                 try {
                     const res = await fetch(`http://localhost:3001/api/patients/${id}`);
                     const json = await res.json();
-
                     if (json.data) {
                         const p = json.data;
                         setFormData({
@@ -80,7 +78,6 @@ export const NewPatient = () => {
         const { name, value } = e.target;
         setError('');
         setDuplicatePatient(null);
-
         if (name.startsWith('history.')) {
             const field = name.split('.')[1];
             setFormData(prev => ({
@@ -96,14 +93,11 @@ export const NewPatient = () => {
         e.preventDefault();
         setLoading(true);
         setError('');
-
         try {
-            // 1. Verificación de Duplicados (Solo en creación)
             if (!isEditMode) {
                 const checkRes = await fetch('http://localhost:3001/api/patients');
                 const { data } = await checkRes.json();
                 const existing = data.find(p => p.dni === formData.dni && formData.dni !== '');
-
                 if (existing) {
                     setError(`El paciente "${existing.name}" ya está registrado con ese DNI.`);
                     setDuplicatePatient(existing);
@@ -112,25 +106,13 @@ export const NewPatient = () => {
                     return;
                 }
             }
-
-            // 2. Preparación de URL y Método
-            const url = isEditMode
-                ? `http://localhost:3001/api/patients/${id}`
-                : 'http://localhost:3001/api/patients';
+            const url = isEditMode ? `http://localhost:3001/api/patients/${id}` : 'http://localhost:3001/api/patients';
             const method = isEditMode ? 'PUT' : 'POST';
-
-            // 3. Envío de Datos
             const response = await fetch(url, {
                 method: method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...formData,
-                    // Si el backend espera un string para el campo JSON history, descomenta la siguiente línea:
-                    // history: JSON.stringify(formData.history),
-                    owner_member_id: user?.id || 1
-                })
+                body: JSON.stringify({ ...formData, owner_member_id: user?.id || 1 })
             });
-
             if (response.ok) {
                 toast.success(isEditMode ? "Paciente actualizado correctamente" : "Paciente registrado con éxito");
                 navigate('/pacientes');
@@ -147,271 +129,199 @@ export const NewPatient = () => {
     };
 
     const inputClass = (isError) => `
-        w-full pl-12 pr-4 py-3 rounded-2xl border outline-none transition-all duration-300
+        w-full pl-12 pr-4 py-3 rounded-xl border text-sm transition-all duration-200 outline-none
         ${isError
-            ? 'border-red-400/50 bg-red-500/5 ring-4 ring-red-500/10 text-red-600 dark:text-red-400'
-            : 'border-gray-100 dark:border-dark-border bg-gray-50/50 dark:bg-white/5 text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-dark-surface focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500/50'}
+            ? 'border-red-500 bg-red-50 dark:bg-red-500/10 text-red-600'
+            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 focus:border-[#50e3c2] focus:ring-4 focus:ring-[#50e3c2]/5'}
     `;
 
+    const labelClass = "text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.15em] mb-2 block ml-1";
+
     if (fetching) return (
-        <div className="h-screen flex items-center justify-center text-gray-400 italic animate-pulse uppercase text-xs tracking-widest">
-            Cargando expediente...
+        <div className="h-screen flex items-center justify-center text-slate-400 font-bold uppercase text-[10px] tracking-[0.3em] animate-pulse">
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-12 h-1 bg-[#50e3c2] rounded-full" />
+                Sincronizando Expediente...
+            </div>
         </div>
     );
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Botón Volver */}
-            <Link to="/pacientes" className="flex items-center gap-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-200 mb-8 text-sm transition-colors group">
-                <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-                <span className="font-light tracking-wide">Volver a la base de datos</span>
+        <div className="max-w-5xl mx-auto px-6 pt-8 pb-20 animate-in fade-in duration-700">
+            {/* Botón Volver - Estilo Dashboard */}
+            <Link to="/pacientes" className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 mb-8 text-[11px] font-bold uppercase tracking-widest transition-colors group">
+                <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+                Volver a pacientes
             </Link>
 
-            <header className="mb-10">
-                <div className="flex items-center gap-5 mb-2">
-                    <div className={`p-4 rounded-[1.5rem] text-white shadow-2xl transition-colors ${isEditMode ? 'bg-blue-600 shadow-blue-500/20' : 'bg-orange-500 shadow-orange-500/20'}`}>
-                        {isEditMode ? <Edit3 className="w-7 h-7" strokeWidth={1.5} /> : <UserPlus className="w-7 h-7" strokeWidth={1.5} />}
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                        <div className="w-1 h-4 bg-[#50e3c2]" />
+                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                            {isEditMode ? 'Edición de registro' : 'Alta de paciente'}
+                        </span>
                     </div>
-                    <div>
-                        <h1 className="text-4xl font-light text-gray-900 dark:text-white tracking-tight">
-                            {isEditMode ? 'Editar' : 'Nuevo'} <span className="font-bold">Paciente</span>
-                        </h1>
-                        <p className="text-gray-500 dark:text-gray-400 text-sm font-light mt-1">
-                            {isEditMode ? 'Modifica los datos del expediente seleccionado' : 'Crea una nueva ficha clínica normalizada'}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Banner de Error */}
-                <div ref={errorRef}>
-                    {error && (
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-[2rem] mt-8 animate-in zoom-in-95 duration-300 backdrop-blur-md">
-                            <div className="flex items-center gap-3">
-                                <AlertCircle size={20} className="shrink-0" />
-                                <span className="text-sm font-medium">{error}</span>
-                            </div>
-                            {duplicatePatient && (
-                                <button
-                                    type="button"
-                                    onClick={() => navigate(`/pacientes?open=${duplicatePatient.id}`)}
-                                    className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 shrink-0"
-                                >
-                                    <ExternalLink size={14} /> Abrir Perfil
-                                </button>
-                            )}
-                        </div>
-                    )}
+                    <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+                        {isEditMode ? 'Editar' : 'Nuevo'} <span className="text-[#50e3c2]">Paciente</span>
+                    </h1>
                 </div>
             </header>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                {/* SECCIÓN 1: DATOS PERSONALES */}
-                <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] p-10 shadow-sm">
-                    <h2 className="text-sm font-bold mb-8 flex items-center gap-3 text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">
-                        <span className="w-9 h-9 bg-orange-500/10 text-orange-500 rounded-md flex items-center justify-center text-xs">01</span>
-                        Información Personal
-                    </h2>
+            {/* Banner de Error Estilo Dashboard */}
+            <div ref={errorRef}>
+                {error && (
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-white dark:bg-slate-800 border-l-4 border-red-500 shadow-sm rounded-xl mb-10 animate-in slide-in-from-top-2">
+                        <div className="flex items-center gap-3">
+                            <AlertCircle size={18} className="text-red-500" />
+                            <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{error}</span>
+                        </div>
+                        {duplicatePatient && (
+                            <button
+                                type="button"
+                                onClick={() => navigate(`/pacientes?open=${duplicatePatient.id}`)}
+                                className="bg-slate-900 text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-slate-800 transition-all"
+                            >
+                                Ver Perfil Existente
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="md:col-span-2 relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Nombre Completo</label>
-                            <div className="relative">
-                                <UserPlus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="name" required value={formData.name} onChange={handleChange}
-                                    className={inputClass(error.includes('registrado'))}
-                                    placeholder="Ej. Juan Pérez García"
-                                />
+            <form onSubmit={handleSubmit} className="space-y-8">
+                {/* GRID PRINCIPAL */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                    {/* SECCIÓN 1: DATOS PERSONALES */}
+                    <div className="bg-white dark:bg-slate-800/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+                        <h2 className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                            <span className="text-[#50e3c2]">01</span> Información Base
+                        </h2>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className={labelClass}>Nombre Completo</label>
+                                <div className="relative">
+                                    <UserPlus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                                    <input name="name" required value={formData.name} onChange={handleChange} className={inputClass(false)} placeholder="Nombre y Apellidos" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className={labelClass}>DNI/NIE</label>
+                                    <div className="relative">
+                                        <Fingerprint size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600" />
+                                        <input name="dni" required value={formData.dni} onChange={handleChange} className={inputClass(false)} placeholder="Documento" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Género</label>
+                                    <select name="gender" value={formData.gender} onChange={handleChange} className={inputClass(false)}>
+                                        <option value="">Seleccionar...</option>
+                                        <option value="Masculino">Masculino</option>
+                                        <option value="Femenino">Femenino</option>
+                                        <option value="Otro">Otro</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className={labelClass}>Fecha de Nacimiento</label>
+                                <div className="relative">
+                                    <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#50e3c2]" />
+                                    <input name="birth_date" type="date" value={formData.birth_date} onChange={handleChange} className={inputClass(false)} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* SECCIÓN 2: CONTACTO Y SEGURO */}
+                    <div className="space-y-8 mt-2">
+                        <div className="bg-white dark:bg-slate-800/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+                            <h2 className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                                <span className="text-[#50e3c2]">02</span> Contacto
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="relative">
+                                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                                    <input name="email" type="email" value={formData.email} onChange={handleChange} className={inputClass(false)} placeholder="Email" />
+                                </div>
+                                <div className="relative">
+                                    <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                                    <input name="phone" type="tel" value={formData.phone} onChange={handleChange} className={inputClass(false)} placeholder="Móvil" />
+                                </div>
                             </div>
                         </div>
 
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">DNI/NIE</label>
-                            <div className="relative">
-                                <Fingerprint size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="dni" required value={formData.dni} onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="12345678X"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Fecha de Nacimiento</label>
-                            <div className="relative">
-                                <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="birth_date" type="date" value={formData.birth_date} onChange={handleChange}
-                                    className={inputClass(false)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Género</label>
-                            <div className="relative">
-                                <UserPlus size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <select
-                                    name="gender"
-                                    value={formData.gender}
-                                    onChange={handleChange}
-                                    className={inputClass(false)}
-                                >
-                                    <option value="">Seleccionar...</option>
-                                    <option value="Masculino">Masculino</option>
-                                    <option value="Femenino">Femenino</option>
-                                    <option value="Otro">Otro</option>
-                                </select>
+                        <div className="bg-white dark:bg-slate-800/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-6">
+                            <h2 className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-4">
+                                <span className="text-[#50e3c2]">03</span> Cobertura Médica
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="relative">
+                                    <HeartPulse size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#50e3c2]" />
+                                    <input name="insurance_name" value={formData.insurance_name} onChange={handleChange} className={inputClass(false)} placeholder="Aseguradora" />
+                                </div>
+                                <div className="relative">
+                                    <CreditCard size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                                    <input name="insurance_number" value={formData.insurance_number} onChange={handleChange} className={inputClass(false)} placeholder="Nº Póliza" />
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* SECCIÓN 2: CONTACTO */}
-                <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] p-10 shadow-sm">
-                    <h2 className="text-sm font-bold mb-8 flex items-center gap-3 text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">
-                        <span className="w-9 h-9 bg-blue-500/10 text-blue-500 rounded-md flex items-center justify-center text-xs">02</span>
-                        Contactos y Ubicación
+                {/* SECCIÓN 4: HISTORIAL (ANCHO COMPLETO) */}
+                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-8 shadow-sm">
+                    <h2 className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em] flex items-center gap-2 mb-6">
+                        <span className="text-[#50e3c2]">04</span> Perfil Clínico Inicial
                     </h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Email</label>
+                    <div className="space-y-6">
+                        <div>
+                            <label className={labelClass}>Motivo de Consulta Principal</label>
                             <div className="relative">
-                                <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="email" type="email" value={formData.email} onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="correo@paciente.com"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Móvil</label>
-                            <div className="relative">
-                                <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="phone" type="tel" value={formData.phone} onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="+34 000 000 000"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="md:col-span-2 relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Dirección Residencial</label>
-                            <div className="relative">
-                                <MapPin size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="address" value={formData.address} onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="Calle, Ciudad, Provincia"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* SECCIÓN 3: SEGURO MÉDICO */}
-                <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] p-10 shadow-sm">
-                    <h2 className="text-sm font-bold mb-8 flex items-center gap-3 text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">
-                        <span className="w-9 h-9 bg-purple-500/10 text-purple-500 rounded-md flex items-center justify-center text-xs">03</span>
-                        Seguro y Cobertura
-                    </h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Aseguradora</label>
-                            <div className="relative">
-                                <HeartPulse size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="insurance_name" value={formData.insurance_name} onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="Ej. Sanitas, OSDE, Adeslas"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Nº de Póliza</label>
-                            <div className="relative">
-                                <CreditCard size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600" />
-                                <input
-                                    name="insurance_number" value={formData.insurance_number} onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="000000000000"
-                                />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* SECCIÓN 4: PERFIL PSICOLÓGICO */}
-                <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] p-10 shadow-sm">
-                    <h2 className="text-sm font-bold mb-8 flex items-center gap-3 text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">
-                        <span className="w-9 h-9 bg-teal-500/10 text-teal-500 rounded-md flex items-center justify-center text-xs">04</span>
-                        Perfil Psicológico Inicial
-                    </h2>
-
-                    <div className="space-y-8">
-                        <div className="relative">
-                            <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Motivo de Consulta Principal</label>
-                            <div className="relative">
-                                <BrainCircuit size={18} className="absolute left-4 top-4 text-gray-300 dark:text-gray-600" />
+                                <BrainCircuit size={18} className="absolute left-4 top-4 text-slate-300" />
                                 <textarea
                                     name="history.motivo_consulta"
                                     value={formData.history.motivo_consulta}
                                     onChange={handleChange}
-                                    className="w-full pl-12 pr-4 py-3 rounded-2xl border border-gray-100 dark:border-dark-border bg-gray-50/50 dark:bg-white/5 text-gray-800 dark:text-gray-100 outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500/50 min-h-[100px]"
-                                    placeholder="Describe brevemente por qué acude a consulta..."
+                                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:border-[#50e3c2] focus:ring-4 focus:ring-[#50e3c2]/5 outline-none min-h-[120px] transition-all"
+                                    placeholder="Describa el motivo de la consulta..."
                                 />
                             </div>
                         </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="relative">
-                                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Antecedentes / Notas</label>
-                                <input
-                                    name="history.antecedentes"
-                                    value={formData.history.antecedentes}
-                                    onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="Ej. Depresión previa, familia..."
-                                />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className={labelClass}>Antecedentes Relevantes</label>
+                                <input name="history.antecedentes" value={formData.history.antecedentes} onChange={handleChange} className={inputClass(false)} placeholder="Notas médicas previas..." />
                             </div>
-                            <div className="relative">
-                                <label className="block text-xs font-bold text-gray-400 dark:text-gray-500 mb-3 ml-1 uppercase tracking-widest">Medicación Actual</label>
-                                <input
-                                    name="history.medicacion"
-                                    value={formData.history.medicacion}
-                                    onChange={handleChange}
-                                    className={inputClass(false)}
-                                    placeholder="¿Toma algún psicofármaco?"
-                                />
+                            <div>
+                                <label className={labelClass}>Medicación Actual</label>
+                                <input name="history.medicacion" value={formData.history.medicacion} onChange={handleChange} className={inputClass(false)} placeholder="Fármacos activos..." />
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Acciones Finales */}
-                <div className="flex items-center justify-end gap-6 pt-6 pb-20">
+                {/* ACCIONES FINALES */}
+                <div className="flex items-center justify-end gap-4 pt-6">
                     <button
                         type="button"
                         onClick={() => navigate('/pacientes')}
-                        className="text-sm font-bold text-gray-400 dark:text-gray-500 hover:text-gray-800 dark:hover:text-white transition-all uppercase tracking-widest"
+                        className="px-6 py-3 text-[10px] font-bold text-slate-400 hover:text-slate-900 dark:hover:text-white uppercase tracking-widest transition-all"
                     >
                         Descartar
                     </button>
                     <button
                         disabled={loading}
-                        className={`px-12 py-4 text-white rounded-2xl font-bold flex items-center gap-3 hover:opacity-90 transition-all disabled:opacity-50 shadow-xl active:scale-95 text-sm uppercase tracking-widest ${isEditMode ? 'bg-blue-600 shadow-blue-500/20' : 'bg-gray-900 shadow-gray-900/20'}`}
+                        className="bg-slate-900 dark:bg-[#50e3c2] text-white dark:text-slate-900 px-10 py-4 rounded-xl text-[11px] font-bold uppercase tracking-[0.15em] hover:opacity-90 transition-all flex items-center gap-2 shadow-lg shadow-slate-200 dark:shadow-none active:scale-95 disabled:opacity-50"
                     >
                         {loading ? 'Procesando...' : (
                             <>
-                                <Save size={18} strokeWidth={2.5} />
-                                {isEditMode ? 'Actualizar Expediente' : 'Guardar Paciente'}
+                                <Save size={16} />
+                                {isEditMode ? 'Actualizar Expediente' : 'Confirmar Registro'}
                             </>
                         )}
                     </button>

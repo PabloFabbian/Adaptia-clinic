@@ -13,7 +13,7 @@ import { useAuth } from '../context/AuthContext';
 // Componentes
 import { PatientDetailsPanel } from '../features/patients/PatientDetailsPanel';
 import { ClinicalNoteModal } from '../features/patients/ClinicalNoteModal';
-import { Can } from '../components/auth/Can'; // Importamos el nuevo componente
+import { Can } from '../components/auth/Can';
 
 export const PatientsPage = () => {
     const navigate = useNavigate();
@@ -29,30 +29,15 @@ export const PatientsPage = () => {
         setSelectedPatient
     );
 
-    // --- LÓGICA DE GOBERNANZA ACTUALIZADA ---
-
-    /**
-     * Define si puede escribir notas. 
-     * Combina Permiso Fino (matriz) + Regla de Negocio (Ownership/TechOwner)
-     */
+    // --- LÓGICA DE GOBERNANZA (Mantenida intacta) ---
     const canWriteNotes = useCallback((patient) => {
         if (!patient || !user) return false;
-
-        // 1. El Tech Owner (Rol 0) siempre puede
         if (Number(activeClinic?.role_id) === 0) return true;
-
-        // 2. Comprobamos si el rol tiene el permiso en la matriz
         const hasMatrixPermission = can('notes.write');
-
-        // 3. Verificamos si es el dueño del expediente (Soberanía de datos)
         const isOwner = patient.owner_member_id === user.id;
-
         return hasMatrixPermission && isOwner;
     }, [user, activeClinic, can]);
 
-    /**
-     * Determina visualmente el nivel de acceso en la tabla
-     */
     const getAccessLevel = (patient) => {
         if (!patient || !user) return 'Read';
         if (Number(activeClinic?.role_id) === 0 || patient.owner_member_id === user.id) {
@@ -111,84 +96,84 @@ export const PatientsPage = () => {
     }, [patients, searchTerm]);
 
     if (authLoading) return (
-        <div className="h-screen flex items-center justify-center bg-[#0f1219]">
-            <Loader2 className="animate-spin text-adaptia-mint" />
+        <div className="h-screen flex items-center justify-center bg-white dark:bg-[#0f172a]">
+            <Loader2 className="animate-spin text-[#50e3c2]" />
         </div>
     );
 
     return (
-        <div className="relative min-h-screen">
+        <div className="relative min-h-screen bg-[#f8fafc] dark:bg-[#11141D]">
             {/* Main Content */}
-            <div className={`max-w-7xl mx-auto px-6 py-10 transition-all duration-700 ease-in-out ${selectedPatient ? 'pr-[420px] scale-[0.97] blur-sm opacity-50 pointer-events-none' : 'scale-100 opacity-100'
+            <div className={`max-w-7xl mx-auto px-6 py-10 transition-all duration-500 ${selectedPatient ? 'pr-[420px] opacity-40 pointer-events-none' : 'opacity-100'
                 }`}>
-                <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-                    <div className="flex items-center gap-5">
-                        <div className="p-4 bg-orange-500 rounded-[1.5rem] text-white shadow-2xl shadow-orange-500/20">
-                            <Users className="w-7 h-7" strokeWidth={1.5} />
+
+                <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3.5 bg-slate-900 dark:bg-slate-800 rounded-xl text-white border border-slate-800 dark:border-slate-700">
+                            <Users className="w-6 h-6" strokeWidth={2} />
                         </div>
                         <div>
-                            <h1 className="text-4xl font-light dark:text-white tracking-tight">
-                                Base de <span className="font-bold">Pacientes</span>
+                            <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                                Pacientes
                             </h1>
-                            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 font-light">
-                                <span className="dark:text-adaptia-mint font-bold">{filteredPatients.length}</span> expedientes en <span className="text-gray-800 dark:text-gray-200 font-medium">{activeClinic?.name || 'Cargando clínica...'}</span>
+                            <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">
+                                <span className="text-[#50e3c2]">{filteredPatients.length}</span> Expedientes activos
                             </p>
                         </div>
                     </div>
 
-                    {/* Uso de Can para el botón de creación */}
                     <Can perform="patients.write">
                         <button
                             onClick={() => navigate('/nuevo-paciente')}
-                            className="flex items-center justify-center gap-2 bg-gray-900 dark:bg-adaptia-blue text-white px-7 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-xl shadow-adaptia-blue/20"
+                            className="flex items-center justify-center gap-2 bg-slate-900 dark:bg-[#50e3c2] text-white dark:text-slate-900 px-6 py-3.5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95"
                         >
-                            <UserPlus size={18} strokeWidth={2.5} /> Nuevo Registro
+                            <UserPlus size={16} strokeWidth={3} /> Nuevo Registro
                         </button>
                     </Can>
                 </header>
 
-                {/* Buscador */}
-                <div className="flex gap-4 mb-10 group">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-adaptia-blue transition-colors" size={20} />
+                {/* Buscador Flat */}
+                <div className="flex gap-3 mb-8">
+                    <div className="relative flex-1 group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#50e3c2] transition-colors" size={18} />
                         <input
                             type="text"
                             placeholder="Buscar por nombre, DNI o email..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-14 pr-6 py-4.5 bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2rem] text-sm outline-none focus:ring-8 focus:ring-adaptia-blue/5 transition-all dark:text-white shadow-sm"
+                            className="w-full pl-12 pr-6 py-4 bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none focus:border-[#50e3c2] dark:focus:border-[#50e3c2] transition-all dark:text-white placeholder:text-slate-400"
                         />
                     </div>
-                    <button className="p-4 bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-2xl text-gray-400 hover:text-adaptia-mint transition-all shadow-sm">
-                        <Filter size={20} />
+                    <button className="px-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 hover:text-[#50e3c2] transition-all">
+                        <Filter size={18} />
                     </button>
                 </div>
 
-                {/* Tabla */}
-                <div className="bg-white dark:bg-dark-surface border border-gray-100 dark:border-dark-border rounded-[2.5rem] shadow-2xl overflow-hidden">
+                {/* Tabla Flat */}
+                <div className="bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left min-w-[800px]">
-                            <thead className="bg-gray-50/50 dark:bg-white/5 text-gray-400 dark:text-gray-500">
-                                <tr className="text-[10px] font-black uppercase tracking-[0.2em]">
-                                    <th className="px-10 py-6">Identidad</th>
-                                    <th className="px-10 py-6">Contacto</th>
-                                    <th className="px-10 py-6">Profesional a Cargo</th>
-                                    <th className="px-10 py-6 text-right">Acceso</th>
+                            <thead>
+                                <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-slate-700">
+                                    <th className="px-8 py-5">Identidad</th>
+                                    <th className="px-8 py-5">Contacto</th>
+                                    <th className="px-8 py-5">Responsable</th>
+                                    <th className="px-8 py-5 text-right">Permisos</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-dark-border">
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="4" className="px-10 py-32 text-center text-gray-400 uppercase text-[10px] font-bold tracking-widest">
-                                            <Loader2 className="animate-spin mx-auto mb-4 text-adaptia-mint" />
-                                            Sincronizando expedientes...
+                                        <td colSpan="4" className="px-10 py-24 text-center">
+                                            <Loader2 className="animate-spin mx-auto mb-4 text-[#50e3c2]" />
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Cargando base de datos...</p>
                                         </td>
                                     </tr>
                                 ) : filteredPatients.length === 0 ? (
                                     <tr>
-                                        <td colSpan="4" className="px-10 py-32 text-center">
-                                            <ShieldAlert size={40} className="mx-auto text-gray-200 mb-4" />
-                                            <p className="text-gray-400 text-sm">No se encontraron pacientes disponibles.</p>
+                                        <td colSpan="4" className="px-10 py-24 text-center">
+                                            <ShieldAlert size={32} className="mx-auto text-slate-200 dark:text-slate-700 mb-4" />
+                                            <p className="text-slate-400 text-sm font-medium">No se encontraron registros.</p>
                                         </td>
                                     </tr>
                                 ) : (
@@ -200,60 +185,53 @@ export const PatientsPage = () => {
                                             <tr
                                                 key={patient.id}
                                                 onClick={() => setSelectedPatient(patient)}
-                                                className={`group hover:bg-gray-50/80 dark:hover:bg-white/[0.02] transition-all cursor-pointer ${selectedPatient?.id === patient.id ? 'bg-orange-50/50 dark:bg-adaptia-blue/5' : ''
+                                                className={`group transition-all cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 ${selectedPatient?.id === patient.id ? 'bg-slate-50 dark:bg-slate-700/50' : ''
                                                     }`}
                                             >
-                                                <td className="px-10 py-6">
-                                                    <div className="flex items-center gap-5">
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-sm border transition-all ${isFullAccess
-                                                            ? 'bg-orange-500/10 text-orange-600 border-orange-500/20 shadow-sm'
-                                                            : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border-indigo-100 dark:border-indigo-500/20'
+                                                <td className="px-8 py-5">
+                                                    <div className="flex items-center gap-4">
+                                                        {/* AVATAR MODIFICADO SOLO PARA MODO DÍA/FLAT */}
+                                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xs border transition-all ${isFullAccess
+                                                            ? 'bg-[#2BBBAD]/70 dark:bg-[#50e3c2] text-slate-900 dark:text-slate-900 border-gray-300/40 dark:border-[#50e3c2] shadow-sm dark:shadow-none'
+                                                            : 'bg-slate-50 dark:bg-slate-700 text-slate-400 dark:text-slate-400 border-slate-100 dark:border-slate-600'
                                                             }`}>
                                                             {patient.name?.charAt(0)}
                                                         </div>
+
                                                         <div>
-                                                            <p className="font-bold text-gray-900 dark:text-gray-100 leading-tight group-hover:text-adaptia-blue transition-colors">
+                                                            <p className="font-bold text-slate-900 dark:text-slate-100 leading-tight">
                                                                 {patient.name}
                                                             </p>
-                                                            <p className="text-[10px] text-gray-400 font-mono mt-1">
-                                                                DNI: {patient.dni || 'S/D'}
+                                                            <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                                                ID: {patient.dni || 'S/D'}
                                                             </p>
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-10 py-6 text-gray-500 dark:text-gray-400">
-                                                    <div className="text-[11px] space-y-1 font-medium">
-                                                        <p className="flex items-center gap-2"><Mail size={13} /> {patient.email || '—'}</p>
-                                                        <p className="flex items-center gap-2"><Phone size={13} /> {patient.phone || '—'}</p>
+                                                <td className="px-8 py-5">
+                                                    <div className="text-[11px] space-y-1 text-slate-500 dark:text-slate-400 font-medium">
+                                                        <p className="flex items-center gap-2"><Mail size={12} className="text-slate-300" /> {patient.email || '—'}</p>
+                                                        <p className="flex items-center gap-2"><Phone size={12} className="text-slate-300" /> {patient.phone || '—'}</p>
                                                     </div>
                                                 </td>
-                                                <td className="px-10 py-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-gray-50 dark:bg-white/5 flex items-center justify-center text-[10px] font-bold text-gray-400 border border-gray-100 dark:border-white/10">
-                                                            {patient.owner_name?.charAt(0) || '?'}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                                                {patient.owner_member_id === user?.id ? (
-                                                                    <span className="text-adaptia-mint font-black">Mío (Tú)</span>
-                                                                ) : (
-                                                                    patient.owner_name || 'Sin asignar'
-                                                                )}
-                                                            </p>
-                                                            <p className="text-[9px] uppercase tracking-tighter text-gray-400 font-medium">Responsable</p>
-                                                        </div>
+                                                <td className="px-8 py-5">
+                                                    <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-[#50e3c2]" />
+                                                        <p className="text-xs font-bold">
+                                                            {patient.owner_member_id === user?.id ? 'Mío (Tú)' : (patient.owner_name || 'Sin asignar')}
+                                                        </p>
                                                     </div>
                                                 </td>
-                                                <td className="px-10 py-6 text-right">
-                                                    <div className="flex items-center justify-end gap-4">
-                                                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.1em] border transition-all ${isFullAccess
-                                                            ? 'bg-adaptia-mint/10 text-adaptia-mint border-adaptia-mint/20 shadow-sm shadow-adaptia-mint/5'
-                                                            : 'bg-indigo-50 dark:bg-indigo-400/5 text-indigo-500 dark:text-indigo-300 border-indigo-100 dark:border-indigo-400/10'
+                                                <td className="px-8 py-5 text-right">
+                                                    <div className="flex items-center justify-end gap-3">
+                                                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border ${isFullAccess
+                                                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+                                                            : 'bg-slate-50 text-slate-400 border-slate-100 dark:bg-slate-900/40 dark:text-slate-500 dark:border-slate-700'
                                                             }`}>
-                                                            {isFullAccess ? <ShieldCheck size={12} /> : <Eye size={12} />}
-                                                            {isFullAccess ? 'Acceso Total' : 'Solo Lectura'}
+                                                            {isFullAccess ? <ShieldCheck size={12} strokeWidth={3} /> : <Eye size={12} strokeWidth={3} />}
+                                                            {isFullAccess ? 'Full' : 'Read'}
                                                         </div>
-                                                        <ChevronRight className="text-gray-300 group-hover:text-adaptia-mint transition-all" size={18} />
+                                                        <ChevronRight className="text-slate-300 group-hover:text-[#50e3c2] transition-colors" size={18} />
                                                     </div>
                                                 </td>
                                             </tr>
@@ -266,7 +244,7 @@ export const PatientsPage = () => {
                 </div>
             </div>
 
-            {/* Paneles laterales y Modales */}
+            {/* Paneles laterales y Modales (Se mantienen igual) */}
             <PatientDetailsPanel
                 patient={selectedPatient}
                 user={user}
